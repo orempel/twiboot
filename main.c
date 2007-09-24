@@ -29,6 +29,7 @@
 
 #define TWI_ADDRESS		0x21
 
+#define COOKIE			0x4711
 #define APP_END			0x1C00
 
 #define CMD_WAIT		0x00
@@ -52,13 +53,13 @@
  *   SLA+W, 0x11, SLA+R, {4 bytes}, STO
  *
  * - write one flash page (64bytes on mega8)
- *   SLA+W, 0x12, addrh, addrl, {64 bytes}, STO
+ *   SLA+W, 0x12, addrh, addrl, 0x47, 0x11, {64 bytes}, STO
  *
  * - read one (or more) flash bytes
  *   SLA+W, 0x13, addrh, addrl, SLA+R, {* bytes}, STO
  *
  * - write one (or more) eeprom bytes
- *   SLA+W, 0x14, addrh, addrl, {* bytes}, STO
+ *   SLA+W, 0x14, addrh, addrl, 0x47, 0x11, {* bytes}, STO
  *
  * - read one (or more) eeprom bytes
  *   SLA+W, 0x15, addrh, addrl, SLA+R, {* bytes}, STO
@@ -67,7 +68,7 @@
  *   SLA+W, 0x1F, STO
  */
 
-const static uint8_t info[16] = "TWIBOOT m8-v1.0";
+const static uint8_t info[16] = "TWIBOOT m8-v1.1";
 const static uint8_t signature[4] = { 0x1E, 0x93, 0x07, 0x00 };
 
 /* wait 40 * 25ms = 1s */
@@ -158,9 +159,21 @@ ISR(TWI_vect)
 			addr |= TWDR;
 			bcnt++;
 
-		} else if (bcnt >= 3 && cmd == CMD_WRITE_FLASH) {
-			buf[bcnt -3] = TWDR;
-			if (bcnt < sizeof(buf) +2) {
+		} else if (bcnt == 3) {
+			if (TWDR == (COOKIE >> 8))
+				bcnt++;
+			else
+				bcnt = 0;
+
+		} else if (bcnt == 4) {
+			if (TWDR == (COOKIE & 0xFF))
+				bcnt++;
+			else
+				bcnt = 0;
+
+		} else if (bcnt >= 5 && cmd == CMD_WRITE_FLASH) {
+			buf[bcnt -5] = TWDR;
+			if (bcnt < sizeof(buf) +4) {
 				bcnt++;
 
 			} else {
@@ -168,7 +181,7 @@ ISR(TWI_vect)
 				bcnt = 0;
 			}
 
-		} else if (bcnt >= 3 && cmd == CMD_WRITE_EEPROM) {
+		} else if (bcnt >= 5 && cmd == CMD_WRITE_EEPROM) {
 			write_eeprom_byte(TWDR);
 			bcnt++;
 		}
