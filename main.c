@@ -266,7 +266,7 @@ int main(void)
 	DDRB = LED_GN | LED_RT;
 	PORTB = LED_GN;
 
-	/* move tnterrupt-vectors to bootloader */
+	/* move interrupt-vectors to bootloader */
 	GICR = (1<<IVCE);
 	GICR = (1<<IVSEL);
 
@@ -293,7 +293,7 @@ int main(void)
 
 	/* move interrupt vectors back to application */
 	GICR = (1<<IVCE);
-	GICR = 0x00;
+	GICR = (0<<IVSEL);
 
 	PORTB = 0x00;
 
