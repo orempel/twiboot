@@ -45,6 +45,9 @@
  * LED on PORTB4 blinks with 20Hz (while bootloader is running)
  * LED on PORTB5 blinks on TWI activity
  *
+ * Fuse H: 0xda (512 words bootloader)
+ * Fuse L: 0x84 (8Mhz internal RC-Osz., 2.7V BOD)
+ *
  * bootloader twi-protocol:
  * - get info about bootloader:
  *   SLA+W, 0x10, SLA+R, {16 bytes}, STO
@@ -68,7 +71,7 @@
  *   SLA+W, 0x1F, STO
  */
 
-const static uint8_t info[16] = "TWIBOOT m8-v1.1";
+const static uint8_t info[16] = "TWIBOOT m8-v1.2";
 const static uint8_t signature[4] = { 0x1E, 0x93, 0x07, 0x00 };
 
 /* wait 40 * 25ms = 1s */
@@ -138,6 +141,8 @@ ISR(TWI_vect)
 			case CMD_GET_SIGNATURE:
 			case CMD_WRITE_FLASH:
 			case CMD_READ_FLASH:
+			case CMD_WRITE_EEPROM:
+			case CMD_READ_EEPROM:
 				/* abort countdown */
 				boot_timeout = 0;
 
