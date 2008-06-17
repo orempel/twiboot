@@ -45,8 +45,9 @@
  * LED on PORTB4 blinks with 20Hz (while bootloader is running)
  * LED on PORTB5 blinks on TWI activity
  *
- * Fuse H: 0xda (512 words bootloader)
- * Fuse L: 0x84 (8Mhz internal RC-Osz., 2.7V BOD)
+ * Fuse E: 0xfa (512 words bootloader)
+ * Fuse H: 0xdd (2.7V BOD)
+ * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
  *
  * bootloader twi-protocol:
  * - get info about bootloader:
@@ -71,8 +72,8 @@
  *   SLA+W, 0x1F, STO
  */
 
-const static uint8_t info[16] = "TWIBOOT m8-v1.2";
-const static uint8_t signature[4] = { 0x1E, 0x93, 0x07, 0x00 };
+const static uint8_t info[16] = "TWIBOOT m88-v12";
+const static uint8_t signature[4] = { 0x1E, 0x93, 0x0A, 0x00 };
 
 /* wait 40 * 25ms = 1s */
 volatile static uint8_t boot_timeout = 40;
@@ -115,8 +116,8 @@ void write_eeprom_byte(uint8_t val)
 	EEDR = val;
 	addr++;
 
-	EECR |= (1<<EEMWE);
-	EECR |= (1<<EEWE);
+	EECR |= (1<<EEMPE);
+	EECR |= (1<<EEPE);
 	eeprom_busy_wait();
 }
 
@@ -272,14 +273,14 @@ int main(void)
 	PORTB = LED_GN;
 
 	/* move interrupt-vectors to bootloader */
-	GICR = (1<<IVCE);
-	GICR = (1<<IVSEL);
+	MCUCR = (1<<IVCE);
+	MCUCR = (1<<IVSEL);
 
 	/* timer0: running with F_CPU/1024 */
-	TCCR0 = (1<<CS02) | (1<<CS00);
+	TCCR0B = (1<<CS02) | (1<<CS00);
 
 	/* enable timer0 OVF interrupt */
-	TIMSK |= (1<<TOIE0);
+	TIMSK0 |= (1<<TOIE0);
 
 	/* TWI init: set address, auto ACKs with interrupts */
 	TWAR = (TWI_ADDRESS<<1);
@@ -293,12 +294,12 @@ int main(void)
 	TWCR = 0x00;
 
 	/* disable timer0 */
-	TIMSK = 0x00;
-	TCCR0 = 0x00;
+	TIMSK0 = 0x00;
+	TCCR0B = 0x00;
 
 	/* move interrupt vectors back to application */
-	GICR = (1<<IVCE);
-	GICR = (0<<IVSEL);
+	MCUCR = (1<<IVCE);
+	MCUCR = (0<<IVSEL);
 
 	PORTB = 0x00;
 

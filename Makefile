@@ -1,6 +1,6 @@
 PRG            = twiboot
 OBJ            = main.o
-MCU_TARGET     = atmega8
+MCU_TARGET     = atmega88
 OPTIMIZE       = -Os
 
 DEFS           =
@@ -41,4 +41,4 @@ bin:  $(PRG).bin
 	$(OBJCOPY) -j .text -j .data -O binary $< $@
 
 install: text
-	uisp -dprog=avr910 -dserial=/dev/ttyS0 -dspeed=115200 -dpart=M8 --erase --upload if=$(PRG).hex
+	uisp -dprog=avr910 -dserial=/dev/ttyS0 -dspeed=115200 -dpart=auto --erase --upload if=$(PRG).hex
