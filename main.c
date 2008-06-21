@@ -76,7 +76,7 @@ const static uint8_t info[16] = "TWIBOOT m88-v12";
 const static uint8_t signature[4] = { 0x1E, 0x93, 0x0A, 0x00 };
 
 /* wait 40 * 25ms = 1s */
-volatile static uint8_t boot_timeout = 40;
+static uint8_t boot_timeout = 40;
 volatile static uint8_t cmd = CMD_WAIT;
 
 /* flash buffer */
@@ -267,6 +267,19 @@ ISR(TIMER0_OVF_vect)
 
 static void (*jump_to_app)(void) = 0x0000;
 
+/*
+ * For newer devices (mega88) the watchdog timer remains active even after a
+ * system reset. So disable it as soon as possible.
+ * automagically called on startup
+ */
+void disable_wdt_timer(void) __attribute__((naked, section(".init3")));
+void disable_wdt_timer(void)
+{
+	MCUSR = 0;
+	WDTCSR = (1<<WDCE) | (1<<WDE);
+	WDTCSR = (0<<WDE);
+}
+
 int main(void)
 {
 	DDRB = LED_GN | LED_RT;
@@ -280,7 +293,7 @@ int main(void)
 	TCCR0B = (1<<CS02) | (1<<CS00);
 
 	/* enable timer0 OVF interrupt */
-	TIMSK0 |= (1<<TOIE0);
+	TIMSK0 = (1<<TOIE0);
 
 	/* TWI init: set address, auto ACKs with interrupts */
 	TWAR = (TWI_ADDRESS<<1);
