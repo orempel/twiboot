@@ -75,7 +75,7 @@ const static uint8_t info[16] = "TWIBOOT m8-v1.2";
 const static uint8_t signature[4] = { 0x1E, 0x93, 0x07, 0x00 };
 
 /* wait 40 * 25ms = 1s */
-volatile static uint8_t boot_timeout = 40;
+static uint8_t boot_timeout = 40;
 volatile static uint8_t cmd = CMD_WAIT;
 
 /* flash buffer */
