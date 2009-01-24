@@ -41,4 +41,7 @@ bin:  $(PRG).bin
 	$(OBJCOPY) -j .text -j .data -O binary $< $@
 
 install: text
-	uisp -dprog=avr910 -dserial=/dev/ttyS0 -dspeed=115200 -dpart=auto --erase --upload if=$(PRG).hex
+	avrdude -c dragon_isp -P usb -p m88 -U flash:w:$(PRG).hex
+
+fuses:
+	avrdude -c dragon_isp -P usb -p m88 -U lfuse:w:0xc2:m -U hfuse:w:0xdd:m -U efuse:w:0xfa:m
