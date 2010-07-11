@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 09/2007 by Olaf Rempel                                  *
+ *   Copyright (C) 07/2010 by Olaf Rempel                                  *
  *   razzor@kopf-tisch.de                                                  *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -24,66 +24,102 @@
 #define F_CPU 8000000
 #include <util/delay.h>
 
+/*
+ * atmega88:
+ * Fuse E: 0xfa (512 words bootloader)
+ * Fuse H: 0xdd (2.7V BOD)
+ * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+ */
+
+/* 25ms @8MHz */
+#define TIMER_RELOAD		(0xFF - 195)
+
+/* 40 * 25ms */
+#define TIMEOUT			40
+
 #define LED_RT			(1<<PORTB4)
 #define LED_GN			(1<<PORTB5)
 
 #define TWI_ADDRESS		0x21
 
-#define COOKIE			0x4711
 #define APP_END			0x1C00
 
+#define VERSION_STRING		"TWIBOOT m88-v20"
+#define SIGNATURE_BYTES		{ 0x1E, 0x93, 0x0A, 0x00 }
+
+/* SLA+R */
 #define CMD_WAIT		0x00
-#define CMD_GET_INFO		0x10
-#define CMD_GET_SIGNATURE	0x11
-#define CMD_WRITE_FLASH		0x12
-#define CMD_READ_FLASH		0x13
-#define CMD_WRITE_EEPROM	0x14
-#define CMD_READ_EEPROM		0x15
-#define CMD_BOOT_APPLICATION	0x1F
+#define CMD_READ_VERSION	0x01
+#define CMD_READ_MEMORY		0x02
+/* internal mappings */
+#define CMD_READ_SIGNATURE	(0x10 | CMD_READ_MEMORY)
+#define CMD_READ_FLASH		(0x20 | CMD_READ_MEMORY)
+#define CMD_READ_EEPROM		(0x30 | CMD_READ_MEMORY)
+#define CMD_READ_PARAMETERS	(0x40 | CMD_READ_MEMORY)	/* only in APP */
+
+/* SLA+W */
+#define CMD_SWITCH_APPLICATION	CMD_READ_VERSION
+#define CMD_WRITE_MEMORY	CMD_READ_MEMORY
+/* internal mappings */
+#define CMD_BOOT_BOOTLOADER	(0x10 | CMD_SWITCH_APPLICATION)	/* only in APP */
+#define CMD_BOOT_APPLICATION	(0x20 | CMD_SWITCH_APPLICATION)
+#define CMD_WRITE_SIGNATURE	(0x10 | CMD_WRITE_MEMORY)
+#define CMD_WRITE_FLASH		(0x20 | CMD_WRITE_MEMORY)
+#define CMD_WRITE_EEPROM	(0x30 | CMD_WRITE_MEMORY)
+#define CMD_WRITE_PARAMETERS	(0x40 | CMD_WRITE_MEMORY)	/* only in APP */
+
+/* CMD_SWITCH_APPLICATION parameter */
+#define BOOTTYPE_BOOTLOADER	0x00				/* only in APP */
+#define BOOTTYPE_APPLICATION	0x80
+
+/* CMD_{READ|WRITE}_* parameter */
+#define MEMTYPE_SIGNATURE	0x00
+#define MEMTYPE_FLASH		0x01
+#define MEMTYPE_EEPROM		0x02
+#define MEMTYPE_PARAMETERS	0x03				/* only in APP */
 
 /*
- * LED on PORTB4 blinks with 20Hz (while bootloader is running)
- * LED on PORTB5 blinks on TWI activity
- *
- * Fuse E: 0xfa (512 words bootloader)
- * Fuse H: 0xdd (2.7V BOD)
- * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+ * LED_GN blinks with 20Hz (while bootloader is running)
+ * LED_RT blinks on TWI activity
  *
  * bootloader twi-protocol:
- * - get info about bootloader:
- *   SLA+W, 0x10, SLA+R, {16 bytes}, STO
+ * - abort boot timeout:
+ *   SLA+W, 0x00, STO
  *
- * - get signature bytes:
- *   SLA+W, 0x11, SLA+R, {4 bytes}, STO
+ * - show bootloader version
+ *   SLA+W, 0x01, SLA+R, {16 bytes}, STO
  *
- * - write one flash page (64bytes on mega8)
- *   SLA+W, 0x12, addrh, addrl, 0x47, 0x11, {64 bytes}, STO
+ * - start application
+ *   SLA+W, 0x01, 0x80, STO
+ *
+ * - read signature bytes
+ *   SLA+W, 0x02, 0x00, SLA+R, {4 bytes}, STO
  *
  * - read one (or more) flash bytes
- *   SLA+W, 0x13, addrh, addrl, SLA+R, {* bytes}, STO
- *
- * - write one (or more) eeprom bytes
- *   SLA+W, 0x14, addrh, addrl, 0x47, 0x11, {* bytes}, STO
+ *   SLA+W, 0x02, 0x01, addrh, addrl, SLA+R, {* bytes}, STO
  *
  * - read one (or more) eeprom bytes
- *   SLA+W, 0x15, addrh, addrl, SLA+R, {* bytes}, STO
+ *   SLA+W, 0x02, 0x02, addrh, addrl, SLA+R, {* bytes}, STO
  *
- * - boot application
- *   SLA+W, 0x1F, STO
+ * - write one flash page (64bytes on mega8)
+ *   SLA+W, 0x02, 0x01, addrh, addrl, {64 bytes}, STO
+ *
+ * - write one (or more) eeprom bytes
+ *   SLA+W, 0x02, 0x02, addrh, addrl, {* bytes}, STO
  */
 
-const static uint8_t info[16] = "TWIBOOT m88-v12";
-const static uint8_t signature[4] = { 0x1E, 0x93, 0x0A, 0x00 };
+const static uint8_t info[16] = VERSION_STRING;
+const static uint8_t signature[4] = SIGNATURE_BYTES;
 
 /* wait 40 * 25ms = 1s */
-static uint8_t boot_timeout = 40;
+static uint8_t boot_timeout = TIMEOUT;
 volatile static uint8_t cmd = CMD_WAIT;
 
 /* flash buffer */
 static uint8_t buf[SPM_PAGESIZE];
 static uint16_t addr;
 
-void write_flash_page(void)
+static void write_flash_page(void)
 {
 	uint16_t pagestart = addr;
 	uint8_t size = SPM_PAGESIZE;
@@ -109,7 +145,16 @@ void write_flash_page(void)
 	boot_rww_enable();
 }
 
-void write_eeprom_byte(uint8_t val)
+static uint8_t read_eeprom_byte(void)
+{
+	EEARL = addr;
+	EEARH = (addr >> 8);
+	EECR |= (1<<EERE);
+	addr++;
+	return EEDR;
+}
+
+static void write_eeprom_byte(uint8_t val)
 {
 	EEARL = addr;
 	EEARH = (addr >> 8);
@@ -123,7 +168,9 @@ void write_eeprom_byte(uint8_t val)
 
 ISR(TWI_vect)
 {
-	static uint8_t bcnt = 0;
+	static uint8_t bcnt;
+	uint8_t data;
+	uint8_t ack = (1<<TWEA);
 
 	switch (TWSR & 0xF8) {
 	/* SLA+W received, ACK returned -> receive data and ACK */
@@ -135,64 +182,87 @@ ISR(TWI_vect)
 
 	/* prev. SLA+W, data received, ACK returned -> receive data and ACK */
 	case 0x80:
-		if (bcnt == 0) {
-			cmd = TWDR;
-			switch (cmd) {
-			case CMD_GET_INFO:
-			case CMD_GET_SIGNATURE:
-			case CMD_WRITE_FLASH:
-			case CMD_READ_FLASH:
-			case CMD_WRITE_EEPROM:
-			case CMD_READ_EEPROM:
+		data = TWDR;
+		switch (bcnt) {
+		case 0:
+			switch (data) {
+			case CMD_SWITCH_APPLICATION:
+			case CMD_WRITE_MEMORY:
+				bcnt++;
+				/* no break */
+
+			case CMD_WAIT:
 				/* abort countdown */
 				boot_timeout = 0;
-
-			case CMD_BOOT_APPLICATION:
-				bcnt++;
 				break;
 
 			default:
-				cmd = CMD_WAIT;
-				bcnt = 0;
+				/* boot app now */
+				data = CMD_BOOT_APPLICATION;
+				ack = (0<<TWEA);
 				break;
 			}
+			cmd = data;
+			break;
 
-		} else if (bcnt == 1) {
-			addr = (TWDR << 8);
-			bcnt++;
+		case 1:
+			switch (cmd) {
+			case CMD_SWITCH_APPLICATION:
+				if (data == BOOTTYPE_APPLICATION) {
+					cmd = CMD_BOOT_APPLICATION;
+				}
+				ack = (0<<TWEA);
+				break;
 
-		} else if (bcnt == 2) {
-			addr |= TWDR;
-			bcnt++;
-
-		} else if (bcnt == 3) {
-			if (TWDR == (COOKIE >> 8))
+			case CMD_WRITE_MEMORY:
 				bcnt++;
-			else
-				bcnt = 0;
+				if (data == MEMTYPE_SIGNATURE) {
+					cmd = CMD_WRITE_SIGNATURE;
 
-		} else if (bcnt == 4) {
-			if (TWDR == (COOKIE & 0xFF))
-				bcnt++;
-			else
-				bcnt = 0;
+				} else if (data == MEMTYPE_FLASH) {
+					cmd = CMD_WRITE_FLASH;
 
-		} else if (bcnt >= 5 && cmd == CMD_WRITE_FLASH) {
-			buf[bcnt -5] = TWDR;
-			if (bcnt < sizeof(buf) +4) {
-				bcnt++;
+				} else if (data == MEMTYPE_EEPROM) {
+					cmd = CMD_WRITE_EEPROM;
 
-			} else {
-				write_flash_page();
-				bcnt = 0;
+				} else {
+					ack = (0<<TWEA);
+				}
+				break;
 			}
+			break;
 
-		} else if (bcnt >= 5 && cmd == CMD_WRITE_EEPROM) {
-			write_eeprom_byte(TWDR);
+		case 2:
+		case 3:
+			addr <<= 8;
+			addr |= data;
 			bcnt++;
+			break;
+
+		default:
+			switch (cmd) {
+			case CMD_WRITE_FLASH:
+				buf[bcnt -4] = data;
+				if (bcnt < sizeof(buf) +3) {
+					bcnt++;
+				} else {
+					write_flash_page();
+					ack = (0<<TWEA);
+				}
+				break;
+
+			case CMD_WRITE_EEPROM:
+				write_eeprom_byte(data);
+				bcnt++;
+				break;
+			}
+			break;
 		}
 
-		TWCR |= (1<<TWINT) | (1<<TWEA);
+		if (ack == 0x00)
+			bcnt = 0;
+
+		TWCR |= (1<<TWINT) | ack;
 		break;
 
 	/* SLA+R received, ACK returned -> send data */
@@ -203,33 +273,30 @@ ISR(TWI_vect)
 	/* prev. SLA+R, data sent, ACK returned -> send data */
 	case 0xB8:
 		switch (cmd) {
-		case CMD_GET_INFO:
-			TWDR = info[bcnt++];
+		case CMD_READ_VERSION:
+			data = info[bcnt++];
 			bcnt %= sizeof(info);
 			break;
 
-		case CMD_GET_SIGNATURE:
-			TWDR = signature[bcnt++];
+		case CMD_READ_SIGNATURE:
+			data = signature[bcnt++];
 			bcnt %= sizeof(signature);
 			break;
 
 		case CMD_READ_FLASH:
-			TWDR = pgm_read_byte_near(addr++);
+			data = pgm_read_byte_near(addr++);
 			break;
 
 		case CMD_READ_EEPROM:
-			EEARL = addr;
-			EEARH = (addr >> 8);
-			EECR |= (1<<EERE);
-			addr++;
-			TWDR = EEDR;
+			data = read_eeprom_byte();
 			break;
 
 		default:
-			TWDR = 0xFF;
+			data = 0xFF;
 			break;
 		}
 
+		TWDR = data;
 		TWCR |= (1<<TWINT) | (1<<TWEA);
 		break;
 
@@ -250,8 +317,8 @@ ISR(TWI_vect)
 
 ISR(TIMER0_OVF_vect)
 {
-	/* come back in 25ms (@8MHz) */
-	TCNT0 = 0xFF - 195;
+	/* restart timer */
+	TCNT0 = TIMER_RELOAD;
 
 	/* blink LED while running */
 	PORTB ^= LED_GN;
@@ -316,10 +383,9 @@ int main(void)
 
 	PORTB = 0x00;
 
-	_delay_ms(25);
-	_delay_ms(25);
-	_delay_ms(25);
-	_delay_ms(25);
+	uint8_t i;
+	for (i = 0; i < 10; i++)
+		_delay_ms(10);
 
 	jump_to_app();
 	return 0;
