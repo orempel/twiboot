@@ -1,14 +1,27 @@
 PRG            = twiboot
 OBJ            = main.o
-MCU_TARGET     = atmega8
+MCU_TARGET     = atmega88
 OPTIMIZE       = -Os
 
-DEFS           =
+ifeq ($(MCU_TARGET), atmega8)
+BOOTLOADER_START=0x1C00
+AVRDUDE_MCU=m8
+endif
+ifeq ($(MCU_TARGET), atmega88)
+BOOTLOADER_START=0x1C00
+AVRDUDE_MCU=m88
+endif
+ifeq ($(MCU_TARGET), atmega168)
+BOOTLOADER_START=0x3C00
+AVRDUDE_MCU=m168
+endif
+
+DEFS           = -DAPP_END=$(BOOTLOADER_START)
 LIBS           =
 
 # Override is only needed by avr-lib build system.
 override CFLAGS        = -g -Wall $(OPTIMIZE) -mmcu=$(MCU_TARGET) $(DEFS)
-override LDFLAGS       = -Wl,-Map,$(PRG).map,--section-start=.text=0x1C00
+override LDFLAGS       = -Wl,-Map,$(PRG).map,--section-start=.text=$(BOOTLOADER_START)
 
 CC             = avr-gcc
 OBJCOPY        = avr-objcopy
@@ -20,6 +33,9 @@ all: $(PRG).elf lst text
 
 $(PRG).elf: $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+%.o: %.c $(MAKEFILE_LIST)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -rf *.o *.lst *.map $(PRG).elf *.hex *.bin
@@ -41,4 +57,9 @@ bin:  $(PRG).bin
 	$(OBJCOPY) -j .text -j .data -O binary $< $@
 
 install: text
-	uisp -dprog=avr910 -dserial=/dev/ttyS0 -dspeed=115200 -dpart=M8 --erase --upload if=$(PRG).hex
+	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U flash:w:$(PRG).hex
+
+fuses:
+	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U lfuse:w:0xc2:m
+	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U hfuse:w:0xdd:m
+	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U efuse:w:0xfa:m
