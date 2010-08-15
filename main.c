@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 07/2010 by Olaf Rempel                                  *
+ *   Copyright (C) 08/2010 by Olaf Rempel                                  *
  *   razzor@kopf-tisch.de                                                  *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -25,11 +25,37 @@
 #include <util/delay.h>
 
 /*
+ * atmega8:
+ * Fuse E: 0xfa (512 words bootloader)
+ * Fuse H: 0xdd (2.7V BOD)
+ * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+ *
  * atmega88:
  * Fuse E: 0xfa (512 words bootloader)
  * Fuse H: 0xdd (2.7V BOD)
  * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+ *
+ * atmega168:
+ * Fuse E: 0xfa (512 words bootloader)
+ * Fuse H: 0xdd (2.7V BOD)
+ * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
  */
+
+#if defined (__AVR_ATmega8__)
+#define VERSION_STRING		"TWIBOOT m8v2.0"
+#define SIGNATURE_BYTES		0x1E, 0x93, 0x07
+
+#elif defined (__AVR_ATmega88__)
+#define VERSION_STRING		"TWIBOOT m88v2.0"
+#define SIGNATURE_BYTES		0x1E, 0x93, 0x0A
+
+#elif defined (__AVR_ATmega168__)
+#define VERSION_STRING		"TWIBOOT m168v2.0"
+#define SIGNATURE_BYTES		0x1E, 0x94, 0x06
+
+#else
+#error MCU not supported
+#endif
 
 /* 25ms @8MHz */
 #define TIMER_RELOAD		(0xFF - 195)
@@ -42,17 +68,12 @@
 
 #define TWI_ADDRESS		0x21
 
-#define APP_END			0x1C00
-
-#define VERSION_STRING		"TWIBOOT m88-v20"
-#define SIGNATURE_BYTES		{ 0x1E, 0x93, 0x0A, 0x00 }
-
 /* SLA+R */
 #define CMD_WAIT		0x00
 #define CMD_READ_VERSION	0x01
 #define CMD_READ_MEMORY		0x02
 /* internal mappings */
-#define CMD_READ_SIGNATURE	(0x10 | CMD_READ_MEMORY)
+#define CMD_READ_CHIPINFO	(0x10 | CMD_READ_MEMORY)
 #define CMD_READ_FLASH		(0x20 | CMD_READ_MEMORY)
 #define CMD_READ_EEPROM		(0x30 | CMD_READ_MEMORY)
 #define CMD_READ_PARAMETERS	(0x40 | CMD_READ_MEMORY)	/* only in APP */
@@ -63,7 +84,7 @@
 /* internal mappings */
 #define CMD_BOOT_BOOTLOADER	(0x10 | CMD_SWITCH_APPLICATION)	/* only in APP */
 #define CMD_BOOT_APPLICATION	(0x20 | CMD_SWITCH_APPLICATION)
-#define CMD_WRITE_SIGNATURE	(0x10 | CMD_WRITE_MEMORY)
+#define CMD_WRITE_CHIPINFO	(0x10 | CMD_WRITE_MEMORY)	/* invalid */
 #define CMD_WRITE_FLASH		(0x20 | CMD_WRITE_MEMORY)
 #define CMD_WRITE_EEPROM	(0x30 | CMD_WRITE_MEMORY)
 #define CMD_WRITE_PARAMETERS	(0x40 | CMD_WRITE_MEMORY)	/* only in APP */
@@ -73,7 +94,7 @@
 #define BOOTTYPE_APPLICATION	0x80
 
 /* CMD_{READ|WRITE}_* parameter */
-#define MEMTYPE_SIGNATURE	0x00
+#define MEMTYPE_CHIPINFO	0x00
 #define MEMTYPE_FLASH		0x01
 #define MEMTYPE_EEPROM		0x02
 #define MEMTYPE_PARAMETERS	0x03				/* only in APP */
@@ -92,7 +113,7 @@
  * - start application
  *   SLA+W, 0x01, 0x80, STO
  *
- * - read signature bytes
+ * - read chip info: 3byte signature, 1byte page size, 2byte flash size, 2byte eeprom size
  *   SLA+W, 0x02, 0x00, SLA+R, {4 bytes}, STO
  *
  * - read one (or more) flash bytes
@@ -109,7 +130,17 @@
  */
 
 const static uint8_t info[16] = VERSION_STRING;
-const static uint8_t signature[4] = SIGNATURE_BYTES;
+const static uint8_t chipinfo[8] = {
+	SIGNATURE_BYTES,
+
+	SPM_PAGESIZE,
+
+	(APP_END >> 8) & 0xFF,
+	APP_END & 0xFF,
+
+	(E2END >> 8 & 0xFF),
+	E2END & 0xFF
+};
 
 /* wait 40 * 25ms = 1s */
 static uint8_t boot_timeout = TIMEOUT;
@@ -160,9 +191,13 @@ static void write_eeprom_byte(uint8_t val)
 	EEARH = (addr >> 8);
 	EEDR = val;
 	addr++;
-
+#if defined (__AVR_ATmega8__)
+	EECR |= (1<<EEMWE);
+	EECR |= (1<<EEWE);
+#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
 	EECR |= (1<<EEMPE);
 	EECR |= (1<<EEPE);
+#endif
 	eeprom_busy_wait();
 }
 
@@ -216,8 +251,8 @@ ISR(TWI_vect)
 
 			case CMD_WRITE_MEMORY:
 				bcnt++;
-				if (data == MEMTYPE_SIGNATURE) {
-					cmd = CMD_WRITE_SIGNATURE;
+				if (data == MEMTYPE_CHIPINFO) {
+					cmd = CMD_WRITE_CHIPINFO;
 
 				} else if (data == MEMTYPE_FLASH) {
 					cmd = CMD_WRITE_FLASH;
@@ -228,6 +263,10 @@ ISR(TWI_vect)
 				} else {
 					ack = (0<<TWEA);
 				}
+				break;
+
+			default:
+				ack = (0<<TWEA);
 				break;
 			}
 			break;
@@ -255,6 +294,10 @@ ISR(TWI_vect)
 				write_eeprom_byte(data);
 				bcnt++;
 				break;
+
+			default:
+				ack = (0<<TWEA);
+				break;
 			}
 			break;
 		}
@@ -278,9 +321,9 @@ ISR(TWI_vect)
 			bcnt %= sizeof(info);
 			break;
 
-		case CMD_READ_SIGNATURE:
-			data = signature[bcnt++];
-			bcnt %= sizeof(signature);
+		case CMD_READ_CHIPINFO:
+			data = chipinfo[bcnt++];
+			bcnt %= sizeof(chipinfo);
 			break;
 
 		case CMD_READ_FLASH:
@@ -332,13 +375,14 @@ ISR(TIMER0_OVF_vect)
 		cmd = CMD_BOOT_APPLICATION;
 }
 
-static void (*jump_to_app)(void) = 0x0000;
+static void (*jump_to_app)(void) __attribute__ ((noreturn)) = 0x0000;
 
 /*
  * For newer devices (mega88) the watchdog timer remains active even after a
  * system reset. So disable it as soon as possible.
  * automagically called on startup
  */
+#if defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
 void disable_wdt_timer(void) __attribute__((naked, section(".init3")));
 void disable_wdt_timer(void)
 {
@@ -346,7 +390,9 @@ void disable_wdt_timer(void)
 	WDTCSR = (1<<WDCE) | (1<<WDE);
 	WDTCSR = (0<<WDE);
 }
+#endif
 
+int main(void) __attribute__ ((noreturn));
 int main(void)
 {
 	DDRB = LED_GN | LED_RT;
@@ -356,11 +402,14 @@ int main(void)
 	MCUCR = (1<<IVCE);
 	MCUCR = (1<<IVSEL);
 
-	/* timer0: running with F_CPU/1024 */
+	/* timer0: running with F_CPU/1024, OVF interrupt */
+#if defined (__AVR_ATmega8__)
+	TCCR0 = (1<<CS02) | (1<<CS00);
+	TIMSK = (1<<TOIE0);
+#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
 	TCCR0B = (1<<CS02) | (1<<CS00);
-
-	/* enable timer0 OVF interrupt */
 	TIMSK0 = (1<<TOIE0);
+#endif
 
 	/* TWI init: set address, auto ACKs with interrupts */
 	TWAR = (TWI_ADDRESS<<1);
@@ -374,8 +423,13 @@ int main(void)
 	TWCR = 0x00;
 
 	/* disable timer0 */
+#if defined (__AVR_ATmega8__)
+	TCCR0 = 0x00;
+	TIMSK = 0x00;
+#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
 	TIMSK0 = 0x00;
 	TCCR0B = 0x00;
+#endif
 
 	/* move interrupt vectors back to application */
 	MCUCR = (1<<IVCE);
@@ -383,10 +437,5 @@ int main(void)
 
 	PORTB = 0x00;
 
-	uint8_t i;
-	for (i = 0; i < 10; i++)
-		_delay_ms(10);
-
 	jump_to_app();
-	return 0;
 }
