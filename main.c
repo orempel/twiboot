@@ -26,9 +26,8 @@
 
 /*
  * atmega8:
- * Fuse E: 0xfa (512 words bootloader)
- * Fuse H: 0xdd (2.7V BOD)
- * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+ * Fuse H: 0xda (512 words bootloader)
+ * Fuse L: 0x84 (8Mhz internal RC-Osz., 2.7V BOD)
  *
  * atmega88:
  * Fuse E: 0xfa (512 words bootloader)
@@ -56,6 +55,8 @@
 #else
 #error MCU not supported
 #endif
+
+#define EEPROM_SUPPORT		1
 
 /* 25ms @8MHz */
 #define TIMER_RELOAD		(0xFF - 195)
@@ -137,9 +138,12 @@ const static uint8_t chipinfo[8] = {
 
 	(APP_END >> 8) & 0xFF,
 	APP_END & 0xFF,
-
+#if (EEPROM_SUPPORT)
 	(E2END >> 8 & 0xFF),
 	E2END & 0xFF
+#else
+	0x00, 0x00
+#endif
 };
 
 /* wait 40 * 25ms = 1s */
@@ -176,6 +180,7 @@ static void write_flash_page(void)
 	boot_rww_enable();
 }
 
+#if (EEPROM_SUPPORT)
 static uint8_t read_eeprom_byte(void)
 {
 	EEARL = addr;
@@ -200,6 +205,7 @@ static void write_eeprom_byte(uint8_t val)
 #endif
 	eeprom_busy_wait();
 }
+#endif /* EEPROM_SUPPORT */
 
 ISR(TWI_vect)
 {
@@ -256,10 +262,10 @@ ISR(TWI_vect)
 
 				} else if (data == MEMTYPE_FLASH) {
 					cmd = CMD_WRITE_FLASH;
-
+#if (EEPROM_SUPPORT)
 				} else if (data == MEMTYPE_EEPROM) {
 					cmd = CMD_WRITE_EEPROM;
-
+#endif
 				} else {
 					ack = (0<<TWEA);
 				}
@@ -289,12 +295,12 @@ ISR(TWI_vect)
 					ack = (0<<TWEA);
 				}
 				break;
-
+#if (EEPROM_SUPPORT)
 			case CMD_WRITE_EEPROM:
 				write_eeprom_byte(data);
 				bcnt++;
 				break;
-
+#endif
 			default:
 				ack = (0<<TWEA);
 				break;
@@ -329,11 +335,11 @@ ISR(TWI_vect)
 		case CMD_READ_FLASH:
 			data = pgm_read_byte_near(addr++);
 			break;
-
+#if (EEPROM_SUPPORT)
 		case CMD_READ_EEPROM:
 			data = read_eeprom_byte();
 			break;
-
+#endif
 		default:
 			data = 0xFF;
 			break;
