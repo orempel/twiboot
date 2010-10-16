@@ -38,7 +38,7 @@ $(PRG).elf: $(OBJ)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf *.o *.lst *.map $(PRG).elf *.hex *.bin
+	rm -rf *.o $(PRG).lst $(PRG).map $(PRG).elf $(PRG).hex $(PRG).bin
 
 lst:  $(PRG).lst
 
@@ -59,7 +59,7 @@ bin:  $(PRG).bin
 install: text
 	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U flash:w:$(PRG).hex
 
-fuses:
-	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U lfuse:w:0xc2:m
-	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U hfuse:w:0xdd:m
-	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U efuse:w:0xfa:m
+#fuses:
+#	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U lfuse:w:0xc2:m
+#	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U hfuse:w:0xdd:m
+#	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U efuse:w:0xfa:m

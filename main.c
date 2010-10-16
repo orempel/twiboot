@@ -115,7 +115,7 @@
  *   SLA+W, 0x01, 0x80, STO
  *
  * - read chip info: 3byte signature, 1byte page size, 2byte flash size, 2byte eeprom size
- *   SLA+W, 0x02, 0x00, SLA+R, {4 bytes}, STO
+ *   SLA+W, 0x02, 0x00, 0x00, 0x00, SLA+R, {4 bytes}, STO
  *
  * - read one (or more) flash bytes
  *   SLA+W, 0x02, 0x01, addrh, addrl, SLA+R, {* bytes}, STO
@@ -139,8 +139,8 @@ const static uint8_t chipinfo[8] = {
 	(APP_END >> 8) & 0xFF,
 	APP_END & 0xFF,
 #if (EEPROM_SUPPORT)
-	(E2END >> 8 & 0xFF),
-	E2END & 0xFF
+	((E2END +1) >> 8 & 0xFF),
+	(E2END +1) & 0xFF
 #else
 	0x00, 0x00
 #endif
@@ -239,7 +239,7 @@ ISR(TWI_vect)
 
 			default:
 				/* boot app now */
-				data = CMD_BOOT_APPLICATION;
+				cmd = CMD_BOOT_APPLICATION;
 				ack = (0<<TWEA);
 				break;
 			}
