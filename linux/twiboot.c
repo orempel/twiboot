@@ -99,7 +99,7 @@ static void progress_cb(const char *msg, int pos, int size)
 		for (i = 0; i < sizeof(stars); i++)
 			stars[i] = ((pos * 100 / size) >= (i * 100 / sizeof(stars))) ? '*' : ' ';
 
-		printf("%-14s: [%s] (%d)\r", msg, stars, pos);
+		printf("%-15s: [%s] (%d)\r", msg, stars, pos);
 	}
 
 	if (pos == size)
@@ -218,10 +218,10 @@ int main(int argc, char *argv[])
 	}
 
 	if (!abort) {
-		printf("device        : %-16s (address: 0x%02x)\n", twb.device, twb.address);
-		printf("version       : %-16s (sig: 0x%02x 0x%02x 0x%02x => %s)\n", twb.version, twb.signature[0], twb.signature[1], twb.signature[2], check_signature(twb.signature));
-		printf("flash size    : 0x%04x           (0x%02x bytes/page)\n", twb.flashsize, twb.pagesize);
-		printf("eeprom size   : 0x%04x\n", twb.eepromsize);
+		printf("device         : %-16s (address: 0x%02x)\n", twb.device, twb.address);
+		printf("version        : %-16s (sig: 0x%02x 0x%02x 0x%02x => %s)\n", twb.version, twb.signature[0], twb.signature[1], twb.signature[2], check_signature(twb.signature));
+		printf("flash size     : 0x%04x           (0x%02x bytes/page)\n", twb.flashsize, twb.pagesize);
+		printf("eeprom size    : 0x%04x\n", twb.eepromsize);
 
 		if (progress) {
 			setbuf(stdout, NULL);

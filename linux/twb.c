@@ -267,14 +267,13 @@ int twb_write(struct twiboot *twb, struct databuf *dbuf, int memtype)
 int twb_verify(struct twiboot *twb, struct databuf *dbuf, int memtype)
 {
 	int pos = 0;
-	int size = (memtype == MEMTYPE_FLASH) ? twb->flashsize : twb->eepromsize;
 	uint8_t comp[READ_BLOCK_SIZE];
 
-	while (pos < size) {
+	while (pos < dbuf->length) {
 		if (twb->progress_cb)
-			twb->progress_cb(twb->progress_msg, pos, size);
+			twb->progress_cb(twb->progress_msg, pos, dbuf->length);
 
-		int len = MIN(READ_BLOCK_SIZE, size - pos);
+		int len = MIN(READ_BLOCK_SIZE, dbuf->length - pos);
 		if (twb_read_memory(twb, comp, len, memtype, pos)) {
 			if (twb->progress_cb)
 				twb->progress_cb(twb->progress_msg, -1, -1);
@@ -294,7 +293,7 @@ int twb_verify(struct twiboot *twb, struct databuf *dbuf, int memtype)
 	}
 
 	if (twb->progress_cb)
-		twb->progress_cb(twb->progress_msg, pos, size);
+		twb->progress_cb(twb->progress_msg, pos, dbuf->length);
 
 	dbuf->length = pos;
 	return 0;
