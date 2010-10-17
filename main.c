@@ -405,14 +405,17 @@ int main(void)
 	PORTB = LED_GN;
 
 	/* move interrupt-vectors to bootloader */
-	MCUCR = (1<<IVCE);
-	MCUCR = (1<<IVSEL);
-
 	/* timer0: running with F_CPU/1024, OVF interrupt */
 #if defined (__AVR_ATmega8__)
+	GICR = (1<<IVCE);
+	GICR = (1<<IVSEL);
+
 	TCCR0 = (1<<CS02) | (1<<CS00);
 	TIMSK = (1<<TOIE0);
 #elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
+	MCUCR = (1<<IVCE);
+	MCUCR = (1<<IVSEL);
+
 	TCCR0B = (1<<CS02) | (1<<CS00);
 	TIMSK0 = (1<<TOIE0);
 #endif
@@ -429,17 +432,20 @@ int main(void)
 	TWCR = 0x00;
 
 	/* disable timer0 */
+	/* move interrupt vectors back to application */
 #if defined (__AVR_ATmega8__)
 	TCCR0 = 0x00;
 	TIMSK = 0x00;
+
+	GICR = (1<<IVCE);
+	GICR = (0<<IVSEL);
 #elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
 	TIMSK0 = 0x00;
 	TCCR0B = 0x00;
-#endif
 
-	/* move interrupt vectors back to application */
 	MCUCR = (1<<IVCE);
 	MCUCR = (0<<IVSEL);
+#endif
 
 	PORTB = 0x00;
 
