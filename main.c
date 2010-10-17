@@ -21,9 +21,6 @@
 #include <avr/boot.h>
 #include <avr/pgmspace.h>
 
-#define F_CPU 8000000
-#include <util/delay.h>
-
 /*
  * atmega8:
  * Fuse H: 0xda (512 words bootloader)
@@ -448,6 +445,11 @@ int main(void)
 #endif
 
 	PORTB = 0x00;
+
+	uint16_t wait = 0x0000;
+	do {
+		__asm volatile ("nop");
+	} while (--wait);
 
 	jump_to_app();
 }
