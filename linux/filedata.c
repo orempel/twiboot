@@ -25,7 +25,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "twiboot.h"
+#include "filedata.h"
 
 #define FILETYPE_UNKNOWN	0
 #define FILETYPE_BINARY		1

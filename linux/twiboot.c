@@ -23,11 +23,14 @@
 
 #include <getopt.h>
 
+#include "filedata.h"
 #include "list.h"
-#include "twiboot.h"
+#include "twb.h"
 
-#define OP_READ		0x01
-#define OP_WRITE	0x02
+#define OP_MODE_READ		0x01
+#define OP_MODE_WRITE		0x02
+#define OP_TYPE_FLASH		0x01
+#define OP_TYPE_EEPROM		0x02
 
 struct operation {
 	struct list_head list;
@@ -61,11 +64,11 @@ static struct operation * alloc_operation(const char *arg)
 	}
 
 	if (strncmp(arg, "flash:", 6) == 0) {
-		op->memtype = DATATYPE_FLASH;
+		op->memtype = OP_TYPE_FLASH;
 		op->filename = strdup(arg + 6);
 
 	} else if (strncmp(arg, "eeprom:", 7) == 0) {
-		op->memtype = DATATYPE_EEPROM;
+		op->memtype = OP_TYPE_EEPROM;
 		op->filename = strdup(arg + 7);
 
 	} else {
@@ -74,20 +77,6 @@ static struct operation * alloc_operation(const char *arg)
 	}
 
 	return op;
-}
-
-static char * check_signature(uint8_t *sig)
-{
-	if (sig[0] == 0x1E && sig[1] == 0x93 && sig[2] == 0x07)
-		return "AVR Mega 8";
-
-	if (sig[0] == 0x1E && sig[1] == 0x93 && sig[2] == 0x0A)
-		return "AVR Mega 88";
-
-	if (sig[0] == 0x1E && sig[1] == 0x94 && sig[2] == 0x06)
-		return "AVR Mega 168";
-
-	return "unknown";
 }
 
 static void progress_cb(const char *msg, int pos, int size)
@@ -149,7 +138,7 @@ int main(int argc, char *argv[])
 		{
 			struct operation *op = alloc_operation(optarg);
 			if (op != NULL) {
-				op->mode = OP_READ;
+				op->mode = OP_MODE_READ;
 				list_add_tail(&op->list, &operation_list);
 
 			} else {
@@ -162,7 +151,7 @@ int main(int argc, char *argv[])
 		{
 			struct operation *op = alloc_operation(optarg);
 			if (op != NULL) {
-				op->mode = OP_WRITE;
+				op->mode = OP_MODE_WRITE;
 				list_add_tail(&op->list, &operation_list);
 
 			} else {
@@ -219,7 +208,7 @@ int main(int argc, char *argv[])
 
 	if (!abort) {
 		printf("device         : %-16s (address: 0x%02x)\n", twb.device, twb.address);
-		printf("version        : %-16s (sig: 0x%02x 0x%02x 0x%02x => %s)\n", twb.version, twb.signature[0], twb.signature[1], twb.signature[2], check_signature(twb.signature));
+		printf("version        : %-16s (sig: 0x%02x 0x%02x 0x%02x => %s)\n", twb.version, twb.signature[0], twb.signature[1], twb.signature[2], twb.chipname);
 		printf("flash size     : 0x%04x           (0x%02x bytes/page)\n", twb.flashsize, twb.pagesize);
 		printf("eeprom size    : 0x%04x\n", twb.eepromsize);
 
@@ -231,14 +220,14 @@ int main(int argc, char *argv[])
 		struct operation *op;
 		list_for_each_entry(op, &operation_list, list) {
 			abort = 1;
-			if (op->mode == OP_READ) {
+			if (op->mode == OP_MODE_READ) {
 				struct databuf *dbuf;
 				int result;
 
-				if (op->memtype == DATATYPE_FLASH) {
+				if (op->memtype == OP_TYPE_FLASH) {
 					twb.progress_msg = "reading flash";
 					result = dbuf_alloc(&dbuf, twb.flashsize);
-				} else if (op->memtype == DATATYPE_EEPROM) {
+				} else if (op->memtype == OP_TYPE_EEPROM) {
 					twb.progress_msg = "reading eeprom";
 					result = dbuf_alloc(&dbuf, twb.eepromsize);
 				}
@@ -262,7 +251,7 @@ int main(int argc, char *argv[])
 
 				dbuf_free(dbuf);
 
-			} else if (op->mode == OP_WRITE) {
+			} else if (op->mode == OP_MODE_WRITE) {
 				struct databuf *dbuf;
 				unsigned int size;
 				int result;
@@ -282,7 +271,7 @@ int main(int argc, char *argv[])
 					break;
 				}
 
-				if (op->memtype == DATATYPE_FLASH) {
+				if (op->memtype == OP_TYPE_FLASH) {
 					twb.progress_msg = "writing flash";
 
 					if (dbuf->length > twb.flashsize) {
@@ -291,7 +280,7 @@ int main(int argc, char *argv[])
 						break;
 					}
 
-				} else if (op->memtype == DATATYPE_EEPROM) {
+				} else if (op->memtype == OP_TYPE_EEPROM) {
 					twb.progress_msg = "writing eeprom";
 
 					if (dbuf->length > twb.eepromsize) {
@@ -309,9 +298,9 @@ int main(int argc, char *argv[])
 				}
 
 				if (verify) {
-					if (op->memtype == DATATYPE_FLASH) {
+					if (op->memtype == OP_TYPE_FLASH) {
 						twb.progress_msg = "verifing flash";
-					} else if (op->memtype == DATATYPE_EEPROM) {
+					} else if (op->memtype == OP_TYPE_EEPROM) {
 						twb.progress_msg = "verifing eeprom";
 					}
 

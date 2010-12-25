@@ -31,10 +31,12 @@
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
+#include "filedata.h"
 #include "list.h"
-#include "twiboot.h"
+#include "twb.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*x))
 
 #define READ_BLOCK_SIZE		128	/* bytes in one flash/eeprom read request */
 #define WRITE_BLOCK_SIZE	 16	/* bytes in one eeprom write request */
@@ -58,6 +60,28 @@
 #define MEMTYPE_EEPROM		0x02
 #define MEMTYPE_PARAMETERS	0x03				/* only in APP */
 
+struct chipinfo {
+	uint8_t sig[3];
+	const char name[16];
+};
+
+static struct chipinfo chips[] = {
+	{ { 0x1E, 0x93, 0x07 }, "AVR Mega 8" },
+	{ { 0x1E, 0x93, 0x0A }, "AVR Mega 88" },
+	{ { 0x1E, 0x94, 0x06 }, "AVR Mega 168" },
+};
+
+static const char * twb_get_chipname(uint8_t *sig)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(chips); i++) {
+		struct chipinfo *chip = &chips[i];
+		if (chip->sig[0] == sig[0] && chip->sig[1] == sig[1] && chip->sig[2] == sig[2])
+			return chip->name;
+	}
+
+	return "unknown";
+}
 
 static int twb_switch_application(struct twiboot *twb, uint8_t application)
 {
@@ -206,6 +230,8 @@ int twb_open(struct twiboot *twb)
 	}
 
 	memcpy(twb->signature, chipinfo, sizeof(twb->signature));
+	twb->chipname = twb_get_chipname(twb->signature);
+
 	twb->pagesize = chipinfo[3];
 	twb->flashsize = (chipinfo[4] << 8) + chipinfo[5];
 	twb->eepromsize = (chipinfo[6] << 8) + chipinfo[7];
