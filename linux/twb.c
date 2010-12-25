@@ -189,6 +189,9 @@ int twb_open(struct twiboot *twb)
 		return -1;
 	}
 
+	/* wait for watchdog and startup time */
+	usleep(100000);
+
 	if (twb_read_version(twb)) {
 		fprintf(stderr, "failed to get bootloader version: %s\n", strerror(errno));
 		twb_close(twb);
