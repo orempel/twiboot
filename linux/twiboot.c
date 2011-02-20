@@ -48,7 +48,7 @@ static struct option opts[] = {
 	{"address",	1, 0, 'a'},		// -a <addr>
 	{"device",	1, 0, 'd'},		// [ -d <device> ]
 	{"help",	0, 0, 'h'},		// [ -h ]
-	{"no-progress",	0, 0, 'p'},		// [ -p ]
+	{"progress",	1, 0, 'p'},		// [ -p <0|1|2> ]
 	{"read",	1, 0, 'r'},		// [ -r <flash|eeprom>:<file.hex> ]
 	{"write",	1, 0, 'w'},		// [ -w <flash|eeprom>:<file.hex> ]
 	{"no-verify",	0, 0, 'n'},		// [ -n ]
@@ -79,20 +79,45 @@ static struct operation * alloc_operation(const char *arg)
 	return op;
 }
 
-static void progress_cb(const char *msg, int pos, int size)
+static void progress_mode1_cb(const char *msg, int pos, int size)
 {
 	if (pos != -1 && size != -1) {
 		char stars[50];
-		int i;
 
+		int i;
+		int count = (pos * sizeof(stars) / size);
 		for (i = 0; i < sizeof(stars); i++)
-			stars[i] = ((pos * 100 / size) >= (i * 100 / sizeof(stars))) ? '*' : ' ';
+			stars[i] = (i < count) ? '*' : ' ';
 
 		printf("%-15s: [%s] (%d)\r", msg, stars, pos);
 	}
 
 	if (pos == size)
 		printf("\n");
+}
+
+static void progress_mode2_cb(const char *msg, int pos, int size)
+{
+	static int old_count;
+
+	if (pos != -1 && size != -1) {
+		if (pos == 0) {
+			old_count = 0;
+			printf("%-15s: [", msg);
+
+		} else if (pos <=size) {
+			int i;
+			int count = (pos * 50 / size);
+			for (i = old_count; i < count; i++)
+				printf("*");
+
+			old_count = count;
+
+			if (pos == size) {
+				printf("] (%d)\n", pos);
+			}
+		}
+	}
 }
 
 int main(int argc, char *argv[])
@@ -104,7 +129,7 @@ int main(int argc, char *argv[])
 
 	int arg = 0, code = 0, abort = 0;
 	while (code != -1) {
-		code = getopt_long(argc, argv, "a:d:hnpr:w:", opts, &arg);
+		code = getopt_long(argc, argv, "a:d:hnp:r:w:", opts, &arg);
 
 		switch (code) {
 		case 'a':	/* address */
@@ -164,7 +189,17 @@ int main(int argc, char *argv[])
 				verify = 0;
 				break;
 
-		case 'p':	/* no progress */
+		case 'p':	/* progress bar mode */
+		{
+			if (*optarg >= '0' && *optarg <= '2') {
+				progress = *optarg - '0';
+
+			} else {
+				fprintf(stderr, "invalid progress bar mode: '%s'\n", optarg);
+				abort = 1;
+			}
+			break;
+		}
 				progress = 0;
 				break;
 
@@ -176,7 +211,7 @@ int main(int argc, char *argv[])
 					"  -r <flash|eeprom>:<file>     - reads flash/eeprom to file   (.bin | .hex | -)\n"
 					"  -w <flash|eeprom>:<file>     - write flash/eeprom from file (.bin | .hex)\n"
 					"  -n                           - disable verify after write\n"
-					"  -p                           - disable progress bars\n"
+					"  -p <0|1|2>                   - progress bar mode\n"
 					"\n"
 					"Example: twiboot -a 0x22 -w flash:blmc.hex -w flash:blmc_eeprom.hex\n"
 					"\n");
@@ -207,14 +242,14 @@ int main(int argc, char *argv[])
 	}
 
 	if (!abort) {
-		printf("device         : %-16s (address: 0x%02x)\n", twb.device, twb.address);
+		printf("device         : %-16s (address: 0x%02X)\n", twb.device, twb.address);
 		printf("version        : %-16s (sig: 0x%02x 0x%02x 0x%02x => %s)\n", twb.version, twb.signature[0], twb.signature[1], twb.signature[2], twb.chipname);
-		printf("flash size     : 0x%04x           (0x%02x bytes/page)\n", twb.flashsize, twb.pagesize);
-		printf("eeprom size    : 0x%04x\n", twb.eepromsize);
+		printf("flash size     : 0x%04x / %5d   (0x%02x bytes/page)\n", twb.flashsize, twb.flashsize, twb.pagesize);
+		printf("eeprom size    : 0x%04x / %5d\n", twb.eepromsize, twb.eepromsize);
 
 		if (progress) {
 			setbuf(stdout, NULL);
-			twb.progress_cb = progress_cb;
+			twb.progress_cb = (progress == 1) ? progress_mode1_cb : progress_mode2_cb;
 		}
 
 		struct operation *op;
