@@ -4,12 +4,12 @@
 #include <stdint.h>
 
 struct databuf {
-	uint32_t size;		// allocation size
-	uint32_t length;	// used size
-	uint8_t data[0];
+    uint32_t size;      // allocation size
+    uint32_t length;    // used size
+    uint8_t data[0];
 };
 
-int dbuf_alloc(struct databuf **dbuf, uint32_t size);
+struct databuf * dbuf_alloc(uint32_t size);
 void dbuf_free(struct databuf *dbuf);
 
 int file_getsize(const char *filename, uint32_t *size);
