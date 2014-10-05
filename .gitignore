@@ -3,4 +3,5 @@
 *.bin
 *.hex
 *.lst
+*.lss
 *.map

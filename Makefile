@@ -1,65 +1,71 @@
-PRG            = twiboot
-OBJ            = main.o
-MCU_TARGET     = atmega88
-OPTIMIZE       = -Os
+CC	:= avr-gcc
+LD	:= avr-ld
+OBJCOPY	:= avr-objcopy
+OBJDUMP	:= avr-objdump
+SIZE	:= avr-size
 
-ifeq ($(MCU_TARGET), atmega8)
-BOOTLOADER_START=0x1C00
+TARGET = twiboot
+SOURCE = $(wildcard *.c)
+
+# select MCU
+MCU = atmega88
+
+AVRDUDE_PROG := -c avr910 -b 115200 -P /dev/ttyUSB0
+#AVRDUDE_PROG := -c dragon_isp -P usb
+
+# ---------------------------------------------------------------------------
+
+ifeq ($(MCU), atmega8)
+# (8Mhz internal RC-Osz., 2.7V BOD)
 AVRDUDE_MCU=m8
-endif
-ifeq ($(MCU_TARGET), atmega88)
+AVRDUDE_FUSES=lfuse:w:0x84:m hfuse:w:0xda:m
+
 BOOTLOADER_START=0x1C00
+endif
+
+ifeq ($(MCU), atmega88)
+# (8Mhz internal RC-Osz., 2.7V BOD)
 AVRDUDE_MCU=m88
+AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xdd:m efuse:w:0xfa:m
+
+BOOTLOADER_START=0x1C00
 endif
-ifeq ($(MCU_TARGET), atmega168)
+
+ifeq ($(MCU), atmega168)
+# (8Mhz internal RC-Osz., 2.7V BOD)
+AVRDUDE_MCU=m168 -F
+AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xdd:m efuse:w:0xfa:m
+
 BOOTLOADER_START=0x3C00
-AVRDUDE_MCU=m168
 endif
 
-DEFS           = -DAPP_END=$(BOOTLOADER_START)
-LIBS           =
+# ---------------------------------------------------------------------------
 
-# Override is only needed by avr-lib build system.
-override CFLAGS        = -g -Wall $(OPTIMIZE) -mmcu=$(MCU_TARGET) $(DEFS)
-override LDFLAGS       = -Wl,-Map,$(PRG).map,--section-start=.text=$(BOOTLOADER_START)
+CFLAGS = -pipe -g -Os -mmcu=$(MCU) -Wall -fdata-sections -ffunction-sections
+CFLAGS += -Wa,-adhlns=$(*F).lst -DBOOTLOADER_START=$(BOOTLOADER_START)
+LDFLAGS = -Wl,-Map,$(@:.elf=.map),--cref,--relax,--gc-sections,--section-start=.text=$(BOOTLOADER_START)
 
-CC             = avr-gcc
-OBJCOPY        = avr-objcopy
-OBJDUMP        = avr-objdump
-SIZE           = avr-size
+# ---------------------------------------------------------------------------
 
-all: $(PRG).elf lst text
-	$(SIZE) -x -A $(PRG).elf
+$(TARGET): $(TARGET).elf
+	@$(SIZE) -B -x --mcu=$(MCU) $<
 
-$(PRG).elf: $(OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+$(TARGET).elf: $(SOURCE:.c=.o)
+	@echo " Linking file:  $@"
+	@$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	@$(OBJDUMP) -h -S $@ > $(@:.elf=.lss)
+	@$(OBJCOPY) -j .text -j .data -O ihex $@ $(@:.elf=.hex)
+	@$(OBJCOPY) -j .text -j .data -O binary $@ $(@:.elf=.bin)
 
 %.o: %.c $(MAKEFILE_LIST)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo " Building file: $<"
+	@$(CC) $(CFLAGS) -o $@ -c $<
 
 clean:
-	rm -rf *.o $(PRG).lst $(PRG).map $(PRG).elf $(PRG).hex $(PRG).bin
+	rm -rf $(SOURCE:.c=.o) $(SOURCE:.c=.lst) $(addprefix $(TARGET), .elf .map .lss .hex .bin)
 
-lst:  $(PRG).lst
+install: $(TARGET).elf
+	avrdude $(AVRDUDE_PROG) -p $(AVRDUDE_MCU) -U flash:w:$(<:.elf=.hex)
 
-%.lst: %.elf
-	$(OBJDUMP) -h -S $< > $@
-
-text: hex bin
-
-hex:  $(PRG).hex
-bin:  $(PRG).bin
-
-%.hex: %.elf
-	$(OBJCOPY) -j .text -j .data -O ihex $< $@
-
-%.bin: %.elf
-	$(OBJCOPY) -j .text -j .data -O binary $< $@
-
-install: text
-	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U flash:w:$(PRG).hex
-
-#fuses:
-#	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U lfuse:w:0xc2:m
-#	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U hfuse:w:0xdd:m
-#	avrdude -c dragon_isp -P usb -p $(AVRDUDE_MCU) -U efuse:w:0xfa:m
+fuses:
+	avrdude $(AVRDUDE_PROG) -p $(AVRDUDE_MCU) $(patsubst %,-U %, $(AVRDUDE_FUSES))

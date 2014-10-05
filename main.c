@@ -54,6 +54,7 @@
 #endif
 
 #define EEPROM_SUPPORT		1
+#define LED_SUPPORT		1
 
 /* 25ms @8MHz */
 #define TIMER_RELOAD		(0xFF - 195)
@@ -61,6 +62,7 @@
 /* 40 * 25ms */
 #define TIMEOUT			40
 
+#if LED_SUPPORT
 #define LED_INIT()		DDRB = ((1<<PORTB4) | (1<<PORTB5))
 #define LED_RT_ON()		PORTB |= (1<<PORTB4)
 #define LED_RT_OFF()		PORTB &= ~(1<<PORTB4)
@@ -68,8 +70,19 @@
 #define LED_GN_OFF()		PORTB &= ~(1<<PORTB5)
 #define LED_GN_TOGGLE()		PORTB ^= (1<<PORTB5)
 #define LED_OFF()		PORTB = 0x00
+#else
+#define LED_INIT()
+#define LED_RT_ON()
+#define LED_RT_OFF()
+#define LED_GN_ON()
+#define LED_GN_OFF()
+#define LED_GN_TOGGLE()
+#define LED_OFF()
+#endif
 
+#ifndef TWI_ADDRESS
 #define TWI_ADDRESS		0x29
+#endif
 
 /* SLA+R */
 #define CMD_WAIT		0x00
@@ -138,8 +151,8 @@ const static uint8_t chipinfo[8] = {
 
 	SPM_PAGESIZE,
 
-	(APP_END >> 8) & 0xFF,
-	APP_END & 0xFF,
+	(BOOTLOADER_START >> 8) & 0xFF,
+	BOOTLOADER_START & 0xFF,
 #if (EEPROM_SUPPORT)
 	((E2END +1) >> 8 & 0xFF),
 	(E2END +1) & 0xFF
@@ -162,7 +175,7 @@ static void write_flash_page(void)
 	uint8_t size = SPM_PAGESIZE;
 	uint8_t *p = buf;
 
-	if (pagestart >= APP_END)
+	if (pagestart >= BOOTLOADER_START)
 		return;
 
 	boot_page_erase(pagestart);
