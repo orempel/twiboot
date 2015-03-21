@@ -35,6 +35,11 @@
  * Fuse E: 0xfa (512 words bootloader)
  * Fuse H: 0xdd (2.7V BOD)
  * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+ *
+ * atmega328p:
+ * Fuse E: 0xfd (2.7V BOD)
+ * Fuse H: 0xda (1024 words bootloader)
+ * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
  */
 
 #if defined (__AVR_ATmega8__)
@@ -48,6 +53,10 @@
 #elif defined (__AVR_ATmega168__)
 #define VERSION_STRING		"TWIBOOT m168v2.1"
 #define SIGNATURE_BYTES		0x1E, 0x94, 0x06
+
+#elif defined (__AVR_ATmega328P__)
+#define VERSION_STRING		"TWIBOOT m328pv2.1"
+#define SIGNATURE_BYTES		0x1E, 0x95, 0x0F
 
 #else
 #error MCU not supported
@@ -145,7 +154,7 @@
  *   SLA+W, 0x02, 0x02, addrh, addrl, {* bytes}, STO
  */
 
-const static uint8_t info[16] = VERSION_STRING;
+const static uint8_t info[18] = VERSION_STRING;
 const static uint8_t chipinfo[8] = {
 	SIGNATURE_BYTES,
 
@@ -214,7 +223,7 @@ static void write_eeprom_byte(uint8_t val)
 #if defined (__AVR_ATmega8__)
 	EECR |= (1<<EEMWE);
 	EECR |= (1<<EEWE);
-#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
+#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || defined (__AVR_ATmega328P__)
 	EECR |= (1<<EEMPE);
 	EECR |= (1<<EEPE);
 #endif
@@ -403,7 +412,7 @@ static void (*jump_to_app)(void) __attribute__ ((noreturn)) = 0x0000;
  * system reset. So disable it as soon as possible.
  * automagically called on startup
  */
-#if defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
+#if defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || defined (__AVR_ATmega328P__)
 void disable_wdt_timer(void) __attribute__((naked, section(".init3")));
 void disable_wdt_timer(void)
 {
@@ -427,7 +436,7 @@ int main(void)
 
 	TCCR0 = (1<<CS02) | (1<<CS00);
 	TIMSK = (1<<TOIE0);
-#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
+#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || defined (__AVR_ATmega328P__)
 	MCUCR = (1<<IVCE);
 	MCUCR = (1<<IVSEL);
 
@@ -454,7 +463,7 @@ int main(void)
 
 	GICR = (1<<IVCE);
 	GICR = (0<<IVSEL);
-#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__)
+#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || defined (__AVR_ATmega328P__)
 	TIMSK0 = 0x00;
 	TCCR0B = 0x00;
 
