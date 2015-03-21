@@ -42,9 +42,9 @@ endif
 ifeq ($(MCU), atmega328p)
 # (8Mhz internal RC-Osz., 2.7V BOD)
 AVRDUDE_MCU=m328p -F
-AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xda:m efuse:w:0xfd:m
+AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xdc:m efuse:w:0xfd:m
 
-BOOTLOADER_START=0x7800
+BOOTLOADER_START=0x7C00
 endif
 
 # ---------------------------------------------------------------------------

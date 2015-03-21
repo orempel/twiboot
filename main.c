@@ -55,7 +55,7 @@
 #define SIGNATURE_BYTES		0x1E, 0x94, 0x06
 
 #elif defined (__AVR_ATmega328P__)
-#define VERSION_STRING		"TWIBOOT m328pv2.1"
+#define VERSION_STRING		"TWIBOOTm328pv2.1"
 #define SIGNATURE_BYTES		0x1E, 0x95, 0x0F
 
 #else
@@ -154,7 +154,7 @@
  *   SLA+W, 0x02, 0x02, addrh, addrl, {* bytes}, STO
  */
 
-const static uint8_t info[18] = VERSION_STRING;
+const static uint8_t info[16] = VERSION_STRING;
 const static uint8_t chipinfo[8] = {
 	SIGNATURE_BYTES,
 
