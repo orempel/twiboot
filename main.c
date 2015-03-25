@@ -38,7 +38,7 @@
  *
  * atmega328p:
  * Fuse E: 0xfd (2.7V BOD)
- * Fuse H: 0xda (1024 words bootloader)
+ * Fuse H: 0xdc (512 words bootloader)
  * Fuse L: 0xc2 (8Mhz internal RC-Osz.)
  */
 
