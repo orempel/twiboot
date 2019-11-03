@@ -23,20 +23,12 @@
 
 #if defined (__AVR_ATmega8__)
 #define VERSION_STRING      "TWIBOOT m8v2.1"
-#define SIGNATURE_BYTES     0x1E, 0x93, 0x07
-
 #elif defined (__AVR_ATmega88__)
 #define VERSION_STRING      "TWIBOOT m88v2.1"
-#define SIGNATURE_BYTES     0x1E, 0x93, 0x0A
-
 #elif defined (__AVR_ATmega168__)
 #define VERSION_STRING      "TWIBOOT m168v2.1"
-#define SIGNATURE_BYTES     0x1E, 0x94, 0x06
-
 #elif defined (__AVR_ATmega328P__)
 #define VERSION_STRING      "TWIBOOTm328pv2.1"
-#define SIGNATURE_BYTES     0x1E, 0x95, 0x0F
-
 #else
 #error MCU not supported
 #endif
@@ -135,7 +127,7 @@
 
 const static uint8_t info[16] = VERSION_STRING;
 const static uint8_t chipinfo[8] = {
-    SIGNATURE_BYTES,
+    SIGNATURE_0, SIGNATURE_1, SIGNATURE_2,
     SPM_PAGESIZE,
 
     (BOOTLOADER_START >> 8) & 0xFF,
