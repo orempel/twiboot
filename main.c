@@ -358,6 +358,7 @@ static uint8_t TWI_data_read(uint8_t bcnt)
 ISR(TWI_vect)
 {
     static uint8_t bcnt;
+    uint8_t control = TWCR;
 
     switch (TWSR & 0xF8)
     {
@@ -365,18 +366,13 @@ ISR(TWI_vect)
         case 0x60:
             bcnt = 0;
             LED_RT_ON();
-            TWCR |= (1<<TWINT) | (1<<TWEA);
             break;
 
         /* prev. SLA+W, data received, ACK returned -> receive data and ACK */
         case 0x80:
-            if (TWI_data_write(bcnt++, TWDR))
+            if (TWI_data_write(bcnt++, TWDR) == 0x00)
             {
-                TWCR |= (1<<TWINT) | (1<<TWEA);
-            }
-            else
-            {
-                TWCR |= (1<<TWINT);
+                control &= ~(1<<TWEA);
                 bcnt = 0;
             }
             break;
@@ -389,22 +385,25 @@ ISR(TWI_vect)
         /* prev. SLA+R, data sent, ACK returned -> send data */
         case 0xB8:
             TWDR = TWI_data_read(bcnt++);
-            TWCR |= (1<<TWINT) | (1<<TWEA);
             break;
 
+        /* prev. SLA+W, data received, NACK returned -> IDLE */
+        case 0x88:
         /* STOP or repeated START -> IDLE */
         case 0xA0:
         /* prev. SLA+R, data sent, NACK returned -> IDLE */
         case 0xC0:
             LED_RT_OFF();
-            TWCR |= (1<<TWINT) | (1<<TWEA);
+            control |= (1<<TWEA);
             break;
 
-        /* illegal state -> reset hardware */
-        case 0xF8:
-            TWCR |= (1<<TWINT) | (1<<TWSTO) | (1<<TWEA);
+        /* illegal state(s) -> reset hardware */
+        default:
+            control |= (1<<TWSTO);
             break;
     }
+
+    TWCR = (1<<TWINT) | control;
 } /* TWI_vect */
 
 
