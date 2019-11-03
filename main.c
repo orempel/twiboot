@@ -210,13 +210,154 @@ static void write_eeprom_byte(uint8_t val)
 
 
 /* *************************************************************************
+ * TWI_data_write
+ * ************************************************************************* */
+static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
+{
+    uint8_t ack = 0x01;
+
+    switch (bcnt)
+    {
+        case 0:
+            switch (data)
+            {
+                case CMD_SWITCH_APPLICATION:
+                case CMD_WRITE_MEMORY:
+                    /* no break */
+
+                case CMD_WAIT:
+                    /* abort countdown */
+                    boot_timeout = 0;
+                    break;
+
+                default:
+                    /* boot app now */
+                    cmd = CMD_BOOT_APPLICATION;
+                    ack = 0x00;
+                    break;
+            }
+
+            cmd = data;
+            break;
+
+        case 1:
+            switch (cmd)
+            {
+                case CMD_SWITCH_APPLICATION:
+                    if (data == BOOTTYPE_APPLICATION)
+                    {
+                        cmd = CMD_BOOT_APPLICATION;
+                    }
+
+                    ack = 0x00;
+                    break;
+
+                case CMD_WRITE_MEMORY:
+                    if (data == MEMTYPE_CHIPINFO)
+                    {
+                        cmd = CMD_WRITE_CHIPINFO;
+                    }
+                    else if (data == MEMTYPE_FLASH)
+                    {
+                        cmd = CMD_WRITE_FLASH;
+                    }
+#if (EEPROM_SUPPORT)
+                    else if (data == MEMTYPE_EEPROM)
+                    {
+                        cmd = CMD_WRITE_EEPROM;
+                    }
+#endif /* (EEPROM_SUPPORT) */
+                    else
+                    {
+                        ack = 0x00;
+                    }
+                    break;
+
+                default:
+                    ack = 0x00;
+                    break;
+            }
+            break;
+
+        case 2:
+        case 3:
+            addr <<= 8;
+            addr |= data;
+            break;
+
+        default:
+            switch (cmd)
+            {
+                case CMD_WRITE_FLASH:
+                    buf[bcnt -4] = data;
+                    if (bcnt >= sizeof(buf) +3)
+                    {
+                        write_flash_page();
+                        ack = 0x00;
+                    }
+                    break;
+
+#if (EEPROM_SUPPORT)
+                case CMD_WRITE_EEPROM:
+                    write_eeprom_byte(data);
+                    break;
+#endif /* (EEPROM_SUPPORT) */
+
+                default:
+                    ack = 0x00;
+                    break;
+            }
+            break;
+    }
+
+    return ack;
+} /* TWI_data_write */
+
+
+/* *************************************************************************
+ * TWI_data_read
+ * ************************************************************************* */
+static uint8_t TWI_data_read(uint8_t bcnt)
+{
+    uint8_t data;
+
+    switch (cmd)
+    {
+        case CMD_READ_VERSION:
+            bcnt %= sizeof(info);
+            data = info[bcnt];
+            break;
+
+        case CMD_READ_CHIPINFO:
+            bcnt %= sizeof(chipinfo);
+            data = chipinfo[bcnt];
+            break;
+
+        case CMD_READ_FLASH:
+            data = pgm_read_byte_near(addr++);
+            break;
+
+#if (EEPROM_SUPPORT)
+        case CMD_READ_EEPROM:
+            data = read_eeprom_byte();
+            break;
+#endif /* (EEPROM_SUPPORT) */
+
+        default:
+            data = 0xFF;
+            break;
+    }
+
+    return data;
+} /* TWI_data_read */
+
+
+/* *************************************************************************
  * TWI_vect
  * ************************************************************************* */
 ISR(TWI_vect)
 {
     static uint8_t bcnt;
-    uint8_t data;
-    uint8_t ack = (1<<TWEA);
 
     switch (TWSR & 0xF8)
     {
@@ -229,116 +370,15 @@ ISR(TWI_vect)
 
         /* prev. SLA+W, data received, ACK returned -> receive data and ACK */
         case 0x80:
-            data = TWDR;
-
-            switch (bcnt)
+            if (TWI_data_write(bcnt++, TWDR))
             {
-                case 0:
-                    switch (data)
-                    {
-                        case CMD_SWITCH_APPLICATION:
-                        case CMD_WRITE_MEMORY:
-                            bcnt++;
-                            /* no break */
-
-                        case CMD_WAIT:
-                            /* abort countdown */
-                            boot_timeout = 0;
-                            break;
-
-                        default:
-                            /* boot app now */
-                            cmd = CMD_BOOT_APPLICATION;
-                            ack = (0<<TWEA);
-                            break;
-                    }
-
-                    cmd = data;
-                    break;
-
-                case 1:
-                    switch (cmd)
-                    {
-                        case CMD_SWITCH_APPLICATION:
-                            if (data == BOOTTYPE_APPLICATION)
-                            {
-                                cmd = CMD_BOOT_APPLICATION;
-                            }
-
-                            ack = (0<<TWEA);
-                            break;
-
-                        case CMD_WRITE_MEMORY:
-                            bcnt++;
-                            if (data == MEMTYPE_CHIPINFO)
-                            {
-                                cmd = CMD_WRITE_CHIPINFO;
-                            }
-                            else if (data == MEMTYPE_FLASH)
-                            {
-                                cmd = CMD_WRITE_FLASH;
-                            }
-#if (EEPROM_SUPPORT)
-                            else if (data == MEMTYPE_EEPROM)
-                            {
-                                cmd = CMD_WRITE_EEPROM;
-                            }
-#endif /* (EEPROM_SUPPORT) */
-                            else
-                            {
-                                ack = (0<<TWEA);
-                            }
-                            break;
-
-                        default:
-                            ack = (0<<TWEA);
-                            break;
-                    }
-                    break;
-
-                case 2:
-                case 3:
-                    addr <<= 8;
-                    addr |= data;
-                    bcnt++;
-                    break;
-
-                default:
-                    switch (cmd)
-                    {
-                        case CMD_WRITE_FLASH:
-                            buf[bcnt -4] = data;
-                            if (bcnt < sizeof(buf) +3)
-                            {
-                                bcnt++;
-                            }
-                            else
-                            {
-                                write_flash_page();
-                                ack = (0<<TWEA);
-                            }
-                            break;
-
-#if (EEPROM_SUPPORT)
-                        case CMD_WRITE_EEPROM:
-                            write_eeprom_byte(data);
-                            bcnt++;
-                            break;
-#endif /* (EEPROM_SUPPORT) */
-
-                        default:
-                            ack = (0<<TWEA);
-                            break;
-                    }
-                    break;
+                TWCR |= (1<<TWINT) | (1<<TWEA);
             }
-
-            if (ack == 0x00)
+            else
             {
+                TWCR |= (1<<TWINT);
                 bcnt = 0;
             }
-
-            TWCR |= (1<<TWINT) | ack;
             break;
 
         /* SLA+R received, ACK returned -> send data */
@@ -348,34 +388,7 @@ ISR(TWI_vect)
 
         /* prev. SLA+R, data sent, ACK returned -> send data */
         case 0xB8:
-            switch (cmd)
-            {
-                case CMD_READ_VERSION:
-                    data = info[bcnt++];
-                    bcnt %= sizeof(info);
-                    break;
-
-                case CMD_READ_CHIPINFO:
-                    data = chipinfo[bcnt++];
-                    bcnt %= sizeof(chipinfo);
-                    break;
-
-                case CMD_READ_FLASH:
-                    data = pgm_read_byte_near(addr++);
-                    break;
-
-#if (EEPROM_SUPPORT)
-                case CMD_READ_EEPROM:
-                    data = read_eeprom_byte();
-                    break;
-#endif /* (EEPROM_SUPPORT) */
-
-                default:
-                    data = 0xFF;
-                    break;
-            }
-
-            TWDR = data;
+            TWDR = TWI_data_read(bcnt++);
             TWCR |= (1<<TWINT) | (1<<TWEA);
             break;
 
