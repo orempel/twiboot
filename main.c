@@ -132,7 +132,7 @@ const static uint8_t chipinfo[8] = {
 
 /* wait 40 * 25ms = 1s */
 static uint8_t boot_timeout = TIMEOUT;
-volatile static uint8_t cmd = CMD_WAIT;
+static uint8_t cmd = CMD_WAIT;
 
 /* flash buffer */
 static uint8_t buf[SPM_PAGESIZE];
@@ -355,7 +355,7 @@ static uint8_t TWI_data_read(uint8_t bcnt)
 /* *************************************************************************
  * TWI_vect
  * ************************************************************************* */
-ISR(TWI_vect)
+static void TWI_vect(void)
 {
     static uint8_t bcnt;
     uint8_t control = TWCR;
@@ -410,7 +410,7 @@ ISR(TWI_vect)
 /* *************************************************************************
  * TIMER0_OVF_vect
  * ************************************************************************* */
-ISR(TIMER0_OVF_vect)
+static void TIMER0_OVF_vect(void)
 {
     /* restart timer */
     TCNT0 = TIMER_RELOAD;
@@ -432,6 +432,26 @@ ISR(TIMER0_OVF_vect)
 
 
 static void (*jump_to_app)(void) __attribute__ ((noreturn)) = 0x0000;
+
+
+/* *************************************************************************
+ * init1
+ * ************************************************************************* */
+void init1(void) __attribute__((naked, section(".init1")));
+void init1(void)
+{
+  /* make sure r1 is 0x00 */
+  asm volatile ("clr __zero_reg__");
+
+  /* on some MCUs the stack pointer defaults NOT to RAMEND */
+#if defined(__AVR_ATmega8__) || defined(__AVR_ATmega8515__) || \
+    defined(__AVR_ATmega8535__) || defined (__AVR_ATmega16__) || \
+    defined (__AVR_ATmega32__) || defined (__AVR_ATmega64__)  || \
+    defined (__AVR_ATmega128__) || defined (__AVR_ATmega162__)
+  SP = RAMEND;
+#endif
+} /* init1 */
+
 
 /*
  * For newer devices the watchdog timer remains active even after a
@@ -456,55 +476,56 @@ void disable_wdt_timer(void)
 /* *************************************************************************
  * main
  * ************************************************************************* */
-int main(void) __attribute__ ((noreturn));
+int main(void) __attribute__ ((OS_main, section (".init9")));
 int main(void)
 {
     LED_INIT();
     LED_GN_ON();
 
-    /* move interrupt-vectors to bootloader */
-    /* timer0: running with F_CPU/1024, OVF interrupt */
+    /* timer0: running with F_CPU/1024 */
 #if defined (__AVR_ATmega8__)
-    GICR = (1<<IVCE);
-    GICR = (1<<IVSEL);
-
     TCCR0 = (1<<CS02) | (1<<CS00);
-    TIMSK = (1<<TOIE0);
 #elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || \
       defined (__AVR_ATmega328P__)
-    MCUCR = (1<<IVCE);
-    MCUCR = (1<<IVSEL);
-
     TCCR0B = (1<<CS02) | (1<<CS00);
-    TIMSK0 = (1<<TOIE0);
 #endif
 
-    /* TWI init: set address, auto ACKs with interrupts */
+    /* TWI init: set address, auto ACKs */
     TWAR = (TWI_ADDRESS<<1);
-    TWCR = (1<<TWEA) | (1<<TWEN) | (1<<TWIE);
+    TWCR = (1<<TWEA) | (1<<TWEN);
 
-    sei();
-    while (cmd != CMD_BOOT_APPLICATION);
-    cli();
+    while (cmd != CMD_BOOT_APPLICATION)
+    {
+        if (TWCR & (1<<TWINT))
+        {
+            TWI_vect();
+        }
+
+#if defined (__AVR_ATmega8__)
+        if (TIFR & (1<<TOV0))
+        {
+            TIMER0_OVF_vect();
+            TIFR = (1<<TOV0);
+        }
+#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || \
+      defined (__AVR_ATmega328P__)
+        if (TIFR0 & (1<<TOV0))
+        {
+            TIMER0_OVF_vect();
+            TIFR0 = (1<<TOV0);
+        }
+#endif
+    }
 
     /* Disable TWI but keep address! */
     TWCR = 0x00;
 
     /* disable timer0 */
-    /* move interrupt vectors back to application */
 #if defined (__AVR_ATmega8__)
     TCCR0 = 0x00;
-    TIMSK = 0x00;
-
-    GICR = (1<<IVCE);
-    GICR = (0<<IVSEL);
 #elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || \
       defined (__AVR_ATmega328P__)
-    TIMSK0 = 0x00;
     TCCR0B = 0x00;
-
-    MCUCR = (1<<IVCE);
-    MCUCR = (0<<IVSEL);
 #endif
 
     LED_OFF();

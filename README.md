@@ -10,10 +10,10 @@ Currently the following AVR MCUs are supported:
 
 AVR MCU | Flash bytes used (.text + .data) | Bootloader region size
 --- | --- | ---
-atmega8 | 872 (0x368) | 512 words
-atmega88 | 918 (0x396) | 512 words
-atmega168 | 970 (0x3CA) | 512 words
-atmega328p | 970 (0x3CA) | 512 words
+atmega8 | 724 (0x2D4) | 512 words
+atmega88 | 744 (0x2E8) | 512 words
+atmega168 | 744 (0x2E8) | 512 words
+atmega328p | 744 (0x2E8) | 512 words
 (Compiled on Ubuntu 18.04 LTS (gcc 5.4.0 / avr-libc 2.0.0) with EEPROM and LED support)
 
 
@@ -91,6 +91,5 @@ Issue reports, feature requests, patches or simply success stories are much appr
 
 ## Roadmap ##
 Some ideas that I want to investigate / implement in twiboot:
-- [ ] do not use interrupts and remove vector table to save flash space
-- [ ] find a way to not rely on TWI clock stretching during write access
-- [ ] support AVR TINYs (USI peripheral, no bootloader fuse, no Read-While-Write flash)
+- find a way to not rely on TWI clock stretching during write access
+- support AVR TINYs (USI peripheral, no bootloader fuse, no Read-While-Write flash)
