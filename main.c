@@ -21,18 +21,7 @@
 #include <avr/boot.h>
 #include <avr/pgmspace.h>
 
-#if defined (__AVR_ATmega8__)
-#define VERSION_STRING      "TWIBOOT m8v2.1"
-#elif defined (__AVR_ATmega88__)
-#define VERSION_STRING      "TWIBOOT m88v2.1"
-#elif defined (__AVR_ATmega168__)
-#define VERSION_STRING      "TWIBOOT m168v2.1"
-#elif defined (__AVR_ATmega328P__)
-#define VERSION_STRING      "TWIBOOTm328pv2.1"
-#else
-#error MCU not supported
-#endif
-
+#define VERSION_STRING      "TWIBOOT v2.1"
 #define EEPROM_SUPPORT      1
 #define LED_SUPPORT         1
 
