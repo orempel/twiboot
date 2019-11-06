@@ -16,7 +16,9 @@ AVRDUDE_PROG := -c avr910 -b 115200 -P /dev/ttyUSB0
 # ---------------------------------------------------------------------------
 
 ifeq ($(MCU), atmega8)
-# (8Mhz internal RC-Osz., 2.7V BOD)
+# atmega8:
+# Fuse L: 0x84 (8Mhz internal RC-Osz., 2.7V BOD)
+# Fuse H: 0xda (512 words bootloader)
 AVRDUDE_MCU=m8
 AVRDUDE_FUSES=lfuse:w:0x84:m hfuse:w:0xda:m
 
@@ -24,7 +26,10 @@ BOOTLOADER_START=0x1C00
 endif
 
 ifeq ($(MCU), atmega88)
-# (8Mhz internal RC-Osz., 2.7V BOD)
+# atmega88:
+# Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+# Fuse H: 0xdd (2.7V BOD)
+# Fuse E: 0xfa (512 words bootloader)
 AVRDUDE_MCU=m88
 AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xdd:m efuse:w:0xfa:m
 
@@ -32,7 +37,10 @@ BOOTLOADER_START=0x1C00
 endif
 
 ifeq ($(MCU), atmega168)
-# (8Mhz internal RC-Osz., 2.7V BOD)
+# atmega168:
+# Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+# Fuse H: 0xdd (2.7V BOD)
+# Fuse E: 0xfa (512 words bootloader)
 AVRDUDE_MCU=m168 -F
 AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xdd:m efuse:w:0xfa:m
 
@@ -40,7 +48,10 @@ BOOTLOADER_START=0x3C00
 endif
 
 ifeq ($(MCU), atmega328p)
-# (8Mhz internal RC-Osz., 2.7V BOD)
+# atmega328p:
+# Fuse L: 0xc2 (8Mhz internal RC-Osz.)
+# Fuse H: 0xdc (512 words bootloader)
+# Fuse E: 0xfd (2.7V BOD)
 AVRDUDE_MCU=m328p -F
 AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xdc:m efuse:w:0xfd:m
 
