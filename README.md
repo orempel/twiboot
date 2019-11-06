@@ -14,6 +14,7 @@ atmega8 | 724 (0x2D4) | 512 words
 atmega88 | 744 (0x2E8) | 512 words
 atmega168 | 744 (0x2E8) | 512 words
 atmega328p | 744 (0x2E8) | 512 words
+
 (Compiled on Ubuntu 18.04 LTS (gcc 5.4.0 / avr-libc 2.0.0) with EEPROM and LED support)
 
 
