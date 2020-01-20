@@ -58,23 +58,17 @@
 /* SLA+R */
 #define CMD_WAIT                0x00
 #define CMD_READ_VERSION        0x01
-#define CMD_READ_MEMORY         0x02
+#define CMD_ACCESS_MEMORY       0x02
 /* internal mappings */
-#define CMD_READ_CHIPINFO       (0x10 | CMD_READ_MEMORY)
-#define CMD_READ_FLASH          (0x20 | CMD_READ_MEMORY)
-#define CMD_READ_EEPROM         (0x30 | CMD_READ_MEMORY)
-#define CMD_READ_PARAMETERS     (0x40 | CMD_READ_MEMORY)    /* only in APP */
+#define CMD_ACCESS_CHIPINFO     (0x10 | CMD_ACCESS_MEMORY)
+#define CMD_ACCESS_FLASH        (0x20 | CMD_ACCESS_MEMORY)
+#define CMD_ACCESS_EEPROM       (0x30 | CMD_ACCESS_MEMORY)
 
 /* SLA+W */
 #define CMD_SWITCH_APPLICATION  CMD_READ_VERSION
-#define CMD_WRITE_MEMORY        CMD_READ_MEMORY
 /* internal mappings */
 #define CMD_BOOT_BOOTLOADER     (0x10 | CMD_SWITCH_APPLICATION) /* only in APP */
 #define CMD_BOOT_APPLICATION    (0x20 | CMD_SWITCH_APPLICATION)
-#define CMD_WRITE_CHIPINFO      (0x10 | CMD_WRITE_MEMORY)       /* invalid */
-#define CMD_WRITE_FLASH         (0x20 | CMD_WRITE_MEMORY)
-#define CMD_WRITE_EEPROM        (0x30 | CMD_WRITE_MEMORY)
-#define CMD_WRITE_PARAMETERS    (0x40 | CMD_WRITE_MEMORY)       /* only in APP */
 
 /* CMD_SWITCH_APPLICATION parameter */
 #define BOOTTYPE_BOOTLOADER     0x00    /* only in APP */
@@ -84,7 +78,6 @@
 #define MEMTYPE_CHIPINFO        0x00
 #define MEMTYPE_FLASH           0x01
 #define MEMTYPE_EEPROM          0x02
-#define MEMTYPE_PARAMETERS      0x03    /* only in APP */
 
 /*
  * LED_GN flashes with 20Hz (while bootloader is running)
@@ -224,7 +217,7 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
             switch (data)
             {
                 case CMD_SWITCH_APPLICATION:
-                case CMD_WRITE_MEMORY:
+                case CMD_ACCESS_MEMORY:
                     /* no break */
 
                 case CMD_WAIT:
@@ -254,19 +247,19 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
                     ack = 0x00;
                     break;
 
-                case CMD_WRITE_MEMORY:
+                case CMD_ACCESS_MEMORY:
                     if (data == MEMTYPE_CHIPINFO)
                     {
-                        cmd = CMD_WRITE_CHIPINFO;
+                        cmd = CMD_ACCESS_CHIPINFO;
                     }
                     else if (data == MEMTYPE_FLASH)
                     {
-                        cmd = CMD_WRITE_FLASH;
+                        cmd = CMD_ACCESS_FLASH;
                     }
 #if (EEPROM_SUPPORT)
                     else if (data == MEMTYPE_EEPROM)
                     {
-                        cmd = CMD_WRITE_EEPROM;
+                        cmd = CMD_ACCESS_EEPROM;
                     }
 #endif /* (EEPROM_SUPPORT) */
                     else
@@ -290,7 +283,7 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
         default:
             switch (cmd)
             {
-                case CMD_WRITE_FLASH:
+                case CMD_ACCESS_FLASH:
                     buf[bcnt -4] = data;
                     if (bcnt >= sizeof(buf) +3)
                     {
@@ -300,7 +293,7 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
                     break;
 
 #if (EEPROM_SUPPORT)
-                case CMD_WRITE_EEPROM:
+                case CMD_ACCESS_EEPROM:
                     write_eeprom_byte(data);
                     break;
 #endif /* (EEPROM_SUPPORT) */
@@ -330,17 +323,17 @@ static uint8_t TWI_data_read(uint8_t bcnt)
             data = info[bcnt];
             break;
 
-        case CMD_READ_CHIPINFO:
+        case CMD_ACCESS_CHIPINFO:
             bcnt %= sizeof(chipinfo);
             data = chipinfo[bcnt];
             break;
 
-        case CMD_READ_FLASH:
+        case CMD_ACCESS_FLASH:
             data = pgm_read_byte_near(addr++);
             break;
 
 #if (EEPROM_SUPPORT)
-        case CMD_READ_EEPROM:
+        case CMD_ACCESS_EEPROM:
             data = read_eeprom_byte();
             break;
 #endif /* (EEPROM_SUPPORT) */
