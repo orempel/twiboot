@@ -196,13 +196,14 @@ static void write_eeprom_byte(uint8_t val)
     EEDR = val;
     addr++;
 
-#if defined (__AVR_ATmega8__)
+#if defined (EEWE)
     EECR |= (1<<EEMWE);
     EECR |= (1<<EEWE);
-#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || \
-      defined (__AVR_ATmega328P__)
+#elif defined (EEPE)
     EECR |= (1<<EEMPE);
     EECR |= (1<<EEPE);
+#else
+#error "EEWE/EEPE not defined"
 #endif
 
     eeprom_busy_wait();
@@ -484,11 +485,12 @@ int main(void)
     LED_GN_ON();
 
     /* timer0: running with F_CPU/1024 */
-#if defined (__AVR_ATmega8__)
+#if defined (TCCR0)
     TCCR0 = (1<<CS02) | (1<<CS00);
-#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || \
-      defined (__AVR_ATmega328P__)
+#elif defined (TCCR0B)
     TCCR0B = (1<<CS02) | (1<<CS00);
+#else
+#error "TCCR0(B) not defined"
 #endif
 
     /* TWI init: set address, auto ACKs */
@@ -502,19 +504,20 @@ int main(void)
             TWI_vect();
         }
 
-#if defined (__AVR_ATmega8__)
+#if defined (TIFR)
         if (TIFR & (1<<TOV0))
         {
             TIMER0_OVF_vect();
             TIFR = (1<<TOV0);
         }
-#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || \
-      defined (__AVR_ATmega328P__)
+#elif defined (TIFR0)
         if (TIFR0 & (1<<TOV0))
         {
             TIMER0_OVF_vect();
             TIFR0 = (1<<TOV0);
         }
+#else
+#error "TIFR(0) not defined"
 #endif
     }
 
@@ -522,11 +525,12 @@ int main(void)
     TWCR = 0x00;
 
     /* disable timer0 */
-#if defined (__AVR_ATmega8__)
+#if defined (TCCR0)
     TCCR0 = 0x00;
-#elif defined (__AVR_ATmega88__) || defined (__AVR_ATmega168__) || \
-      defined (__AVR_ATmega328P__)
+#elif defined (TCCR0B)
     TCCR0B = 0x00;
+#else
+#error "TCCR0(B) not defined"
 #endif
 
     LED_OFF();
