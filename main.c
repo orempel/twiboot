@@ -25,11 +25,13 @@
 #define EEPROM_SUPPORT      1
 #define LED_SUPPORT         1
 
-/* 25ms @8MHz */
-#define TIMER_RELOAD        (0xFF - 195)
+#define F_CPU               8000000ULL
+#define TIMER_DIVISOR       1024
+#define TIMER_IRQFREQ_MS    25
+#define TIMEOUT_MS          1000
 
-/* 40 * 25ms */
-#define TIMEOUT             40
+#define TIMER_MSEC2TICKS(x)     ((x * F_CPU) / (TIMER_DIVISOR * 1000ULL))
+#define TIMER_MSEC2IRQCNT(x)    (x / TIMER_IRQFREQ_MS)
 
 #if LED_SUPPORT
 #define LED_INIT()          DDRB = ((1<<PORTB4) | (1<<PORTB5))
@@ -130,8 +132,7 @@ const static uint8_t chipinfo[8] = {
 #endif
 };
 
-/* wait 40 * 25ms = 1s */
-static uint8_t boot_timeout = TIMEOUT;
+static uint8_t boot_timeout = TIMER_MSEC2IRQCNT(TIMEOUT_MS);
 static uint8_t cmd = CMD_WAIT;
 
 /* flash buffer */
@@ -413,7 +414,7 @@ static void TWI_vect(void)
 static void TIMER0_OVF_vect(void)
 {
     /* restart timer */
-    TCNT0 = TIMER_RELOAD;
+    TCNT0 = 0xFF - TIMER_MSEC2TICKS(TIMER_IRQFREQ_MS);
 
     /* blink LED while running */
     LED_GN_TOGGLE();
