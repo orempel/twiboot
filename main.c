@@ -21,7 +21,7 @@
 #include <avr/boot.h>
 #include <avr/pgmspace.h>
 
-#define VERSION_STRING      "TWIBOOT v2.1"
+#define VERSION_STRING      "TWIBOOT v3.0"
 #define EEPROM_SUPPORT      1
 #define LED_SUPPORT         1
 #define USE_CLOCKSTRETCH    0
