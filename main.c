@@ -24,6 +24,7 @@
 #define VERSION_STRING      "TWIBOOT v2.1"
 #define EEPROM_SUPPORT      1
 #define LED_SUPPORT         1
+#define USE_CLOCKSTRETCH    0
 
 #define F_CPU               8000000ULL
 #define TIMER_DIVISOR       1024
@@ -63,6 +64,8 @@
 #define CMD_ACCESS_CHIPINFO     (0x10 | CMD_ACCESS_MEMORY)
 #define CMD_ACCESS_FLASH        (0x20 | CMD_ACCESS_MEMORY)
 #define CMD_ACCESS_EEPROM       (0x30 | CMD_ACCESS_MEMORY)
+#define CMD_WRITE_FLASH_PAGE    (0x40 | CMD_ACCESS_MEMORY)
+#define CMD_WRITE_EEPROM_PAGE   (0x50 | CMD_ACCESS_MEMORY)
 
 /* SLA+W */
 #define CMD_SWITCH_APPLICATION  CMD_READ_VERSION
@@ -198,6 +201,22 @@ static void write_eeprom_byte(uint8_t val)
 
     eeprom_busy_wait();
 } /* write_eeprom_byte */
+
+
+#if (USE_CLOCKSTRETCH == 0)
+/* *************************************************************************
+ * write_eeprom_buffer
+ * ************************************************************************* */
+static void write_eeprom_buffer(uint8_t size)
+{
+    uint8_t *p = buf;
+
+    while (size--)
+    {
+        write_eeprom_byte(*p++);
+    }
+} /* write_eeprom_buffer */
+#endif /* (USE_CLOCKSTRETCH == 0) */
 #endif /* EEPROM_SUPPORT */
 
 
@@ -279,6 +298,19 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
         default:
             switch (cmd)
             {
+#if (EEPROM_SUPPORT)
+#if (USE_CLOCKSTRETCH)
+                case CMD_ACCESS_EEPROM:
+                    write_eeprom_byte(data);
+                    break;
+#else
+                case CMD_ACCESS_EEPROM:
+                    cmd = CMD_WRITE_EEPROM_PAGE;
+                    /* fall through */
+
+                case CMD_WRITE_EEPROM_PAGE:
+#endif /* (USE_CLOCKSTRETCH) */
+#endif /* (EEPROM_SUPPORT) */
                 case CMD_ACCESS_FLASH:
                 {
                     uint8_t pos = bcnt -4;
@@ -289,18 +321,18 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
                         ack = 0x00;
                     }
 
-                    if (pos >= (sizeof(buf) -1))
+                    if ((cmd == CMD_ACCESS_FLASH) &&
+                        (pos >= (sizeof(buf) -1))
+                       )
                     {
+#if (USE_CLOCKSTRETCH)
                         write_flash_page();
+#else
+                        cmd = CMD_WRITE_FLASH_PAGE;
+#endif
                     }
                     break;
                 }
-
-#if (EEPROM_SUPPORT)
-                case CMD_ACCESS_EEPROM:
-                    write_eeprom_byte(data);
-                    break;
-#endif /* (EEPROM_SUPPORT) */
 
                 default:
                     ack = 0x00;
@@ -392,6 +424,30 @@ static void TWI_vect(void)
 
         /* STOP or repeated START -> IDLE */
         case 0xA0:
+#if (USE_CLOCKSTRETCH == 0)
+            if ((cmd == CMD_WRITE_FLASH_PAGE)
+#if (EEPROM_SUPPORT)
+                || (cmd == CMD_WRITE_EEPROM_PAGE)
+#endif
+               )
+            {
+                /* disable ACK for now, re-enable after page write */
+                control &= ~(1<<TWEA);
+                TWCR = (1<<TWINT) | control;
+
+#if (EEPROM_SUPPORT)
+                if (cmd == CMD_WRITE_EEPROM_PAGE)
+                {
+                    write_eeprom_buffer(bcnt -4);
+                }
+                else
+#endif /* (EEPROM_SUPPORT) */
+                {
+                    write_flash_page();
+                }
+            }
+#endif /* (USE_CLOCKSTRETCH) */
+
             bcnt = 0;
             /* fall through */
 

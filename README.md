@@ -10,10 +10,10 @@ Currently the following AVR MCUs are supported:
 
 AVR MCU | Flash bytes used (.text + .data) | Bootloader region size
 --- | --- | ---
-atmega8 | 718 (0x2CE) | 512 words
-atmega88 | 740 (0x2E4) | 512 words
-atmega168 | 740 (0x2E4) | 512 words
-atmega328p | 740 (0x2E4) | 512 words
+atmega8 | 802 (0x322) | 512 words
+atmega88 | 826 (0x33A) | 512 words
+atmega168 | 826 (0x33A) | 512 words
+atmega328p | 826 (0x33A) | 512 words
 
 (Compiled on Ubuntu 18.04 LTS (gcc 5.4.0 / avr-libc 2.0.0) with EEPROM and LED support)
 
@@ -74,7 +74,7 @@ Read chip info | **SLA+W**, 0x02, 0x00, 0x00, 0x00, **SLA+R**, {8 bytes}, **STO*
 Read 1+ flash bytes | **SLA+W**, 0x02, 0x01, addrh, addrl, **SLA+R**, {* bytes}, **STO** |
 Read 1+ eeprom bytes | **SLA+W**, 0x02, 0x02, addrh, addrl, **SLA+R**, {* bytes}, **STO** |
 Write one flash page | **SLA+W**, 0x02, 0x01, addrh, addrl, {* bytes}, **STO** | page size as indicated in chip info
-Write 1+ eeprom bytes | **SLA+W**, 0x02, 0x02, addrh, addrl, {* bytes}, **STO** |
+Write 1+ eeprom bytes | **SLA+W**, 0x02, 0x02, addrh, addrl, {* bytes}, **STO** | write 0 < n < page size bytes at once
 
 **SLA+R** means Start Condition, Slave Address, Read Access
 
@@ -82,10 +82,23 @@ Write 1+ eeprom bytes | **SLA+W**, 0x02, 0x02, addrh, addrl, {* bytes}, **STO** 
 
 **STO** means Stop Condition
 
+A flash page / eeprom write is only triggered after the Stop Condition.
+During the write process twiboot will NOT acknowledge its slave address.
+
 The multiboot_tool repository contains a simple linux application that uses
 this protocol to access the bootloader over linux i2c device.
 
 The ispprog programming adapter can also be used as a avr910/butterfly to twiboot protocol bridge.
+
+
+## TWI/I2C Clockstretching ##
+While a write is in progress twiboot will not respond on the TWI/I2C bus and the
+TWI/I2C master needs to retry/poll the slave address until the write has completed.
+
+As a compile time option (USE_CLOCKSTRETCH) the previous behavior of twiboot can be restored:
+TWI/I2C Clockstretching is then used to inform the master of the duration of the write.
+Please note that there are some TWI/I2C masters that do not support clockstretching.
+
 
 ## Development ##
 Issue reports, feature requests, patches or simply success stories are much appreciated.
@@ -93,5 +106,4 @@ Issue reports, feature requests, patches or simply success stories are much appr
 
 ## Roadmap ##
 Some ideas that I want to investigate / implement in twiboot:
-- find a way to not rely on TWI clock stretching during write access
 - support AVR TINYs (USI peripheral, no bootloader fuse, no Read-While-Write flash)
