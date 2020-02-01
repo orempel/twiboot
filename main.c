@@ -280,13 +280,21 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
             switch (cmd)
             {
                 case CMD_ACCESS_FLASH:
-                    buf[bcnt -4] = data;
-                    if (bcnt >= sizeof(buf) +3)
+                {
+                    uint8_t pos = bcnt -4;
+
+                    buf[pos] = data;
+                    if (pos >= (sizeof(buf) -2))
                     {
-                        write_flash_page();
                         ack = 0x00;
                     }
+
+                    if (pos >= (sizeof(buf) -1))
+                    {
+                        write_flash_page();
+                    }
                     break;
+                }
 
 #if (EEPROM_SUPPORT)
                 case CMD_ACCESS_EEPROM:
@@ -364,7 +372,6 @@ static void TWI_vect(void)
             if (TWI_data_write(bcnt++, TWDR) == 0x00)
             {
                 control &= ~(1<<TWEA);
-                bcnt = 0;
             }
             break;
 
@@ -380,8 +387,14 @@ static void TWI_vect(void)
 
         /* prev. SLA+W, data received, NACK returned -> IDLE */
         case 0x88:
+            TWI_data_write(bcnt++, TWDR);
+            /* fall through */
+
         /* STOP or repeated START -> IDLE */
         case 0xA0:
+            bcnt = 0;
+            /* fall through */
+
         /* prev. SLA+R, data sent, NACK returned -> IDLE */
         case 0xC0:
             LED_RT_OFF();

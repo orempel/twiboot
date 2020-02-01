@@ -10,10 +10,10 @@ Currently the following AVR MCUs are supported:
 
 AVR MCU | Flash bytes used (.text + .data) | Bootloader region size
 --- | --- | ---
-atmega8 | 706 (0x2C2) | 512 words
-atmega88 | 726 (0x2D6) | 512 words
-atmega168 | 726 (0x2D6) | 512 words
-atmega328p | 726 (0x2D6) | 512 words
+atmega8 | 718 (0x2CE) | 512 words
+atmega88 | 740 (0x2E4) | 512 words
+atmega168 | 740 (0x2E4) | 512 words
+atmega328p | 740 (0x2E4) | 512 words
 
 (Compiled on Ubuntu 18.04 LTS (gcc 5.4.0 / avr-libc 2.0.0) with EEPROM and LED support)
 
