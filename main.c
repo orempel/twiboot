@@ -141,26 +141,24 @@ static void write_flash_page(void)
     uint8_t size = SPM_PAGESIZE;
     uint8_t *p = buf;
 
-    if (pagestart >= BOOTLOADER_START)
+    if (pagestart < BOOTLOADER_START)
     {
-        return;
+        boot_page_erase(pagestart);
+        boot_spm_busy_wait();
+
+        do {
+            uint16_t data = *p++;
+            data |= *p++ << 8;
+            boot_page_fill(addr, data);
+
+            addr += 2;
+            size -= 2;
+        } while (size);
+
+        boot_page_write(pagestart);
+        boot_spm_busy_wait();
+        boot_rww_enable();
     }
-
-    boot_page_erase(pagestart);
-    boot_spm_busy_wait();
-
-    do {
-        uint16_t data = *p++;
-        data |= *p++ << 8;
-        boot_page_fill(addr, data);
-
-        addr += 2;
-        size -= 2;
-    } while (size);
-
-    boot_page_write(pagestart);
-    boot_spm_busy_wait();
-    boot_rww_enable();
 } /* write_flash_page */
 
 
@@ -168,12 +166,11 @@ static void write_flash_page(void)
 /* *************************************************************************
  * read_eeprom_byte
  * ************************************************************************* */
-static uint8_t read_eeprom_byte(void)
+static uint8_t read_eeprom_byte(uint16_t address)
 {
-    EEARL = addr;
-    EEARH = (addr >> 8);
+    EEARL = address;
+    EEARH = (address >> 8);
     EECR |= (1<<EERE);
-    addr++;
 
     return EEDR;
 } /* read_eeprom_byte */
@@ -223,6 +220,7 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
                 case CMD_WAIT:
                     /* abort countdown */
                     boot_timeout = 0;
+                    cmd = data;
                     break;
 
                 default:
@@ -231,8 +229,6 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
                     ack = 0x00;
                     break;
             }
-
-            cmd = data;
             break;
 
         case 1:
@@ -334,7 +330,7 @@ static uint8_t TWI_data_read(uint8_t bcnt)
 
 #if (EEPROM_SUPPORT)
         case CMD_ACCESS_EEPROM:
-            data = read_eeprom_byte();
+            data = read_eeprom_byte(addr++);
             break;
 #endif /* (EEPROM_SUPPORT) */
 

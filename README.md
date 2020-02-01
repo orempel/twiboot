@@ -3,17 +3,17 @@ twiboot is a simple/small bootloader for AVR MCUs with integrated TWI peripheral
 It was originally created to update I2C controlled BLMCs (Brushless Motor Controller) without an AVR ISP adapter.
 
 twiboot acts as a slave device on a TWI/I2C bus and allows reading/writing of the internal flash memory.
-As a compile time option twiboot also allows reading/writing of the whole internal EEPROM memory.
+As a compile time option (EEPROM_SUPPORT) twiboot also allows reading/writing of the whole internal EEPROM memory.
 The bootloader is not able to update itself (only application flash memory region accessible).
 
 Currently the following AVR MCUs are supported:
 
 AVR MCU | Flash bytes used (.text + .data) | Bootloader region size
 --- | --- | ---
-atmega8 | 724 (0x2D4) | 512 words
-atmega88 | 744 (0x2E8) | 512 words
-atmega168 | 744 (0x2E8) | 512 words
-atmega328p | 744 (0x2E8) | 512 words
+atmega8 | 706 (0x2C2) | 512 words
+atmega88 | 726 (0x2D6) | 512 words
+atmega168 | 726 (0x2D6) | 512 words
+atmega328p | 726 (0x2D6) | 512 words
 
 (Compiled on Ubuntu 18.04 LTS (gcc 5.4.0 / avr-libc 2.0.0) with EEPROM and LED support)
 
@@ -33,7 +33,7 @@ A TWI/I2C master can use the protocol to
 - write the internal eeprom (byte wise)
 - exit the bootloader and start the application
 
-As a compile time option twiboot can output its state with two LEDs.
+As a compile time option (LED_SUPPORT) twiboot can output its state with two LEDs.
 One LED will flash with a frequency of 20Hz while twiboot is active (including boot wait time).
 A second LED will flash when the bootloader is addressed on the TWI/I2C bus.
 
@@ -85,6 +85,7 @@ Write 1+ eeprom bytes | **SLA+W**, 0x02, 0x02, addrh, addrl, {* bytes}, **STO** 
 The multiboot_tool repository contains a simple linux application that uses
 this protocol to access the bootloader over linux i2c device.
 
+The ispprog programming adapter can also be used as a avr910/butterfly to twiboot protocol bridge.
 
 ## Development ##
 Issue reports, feature requests, patches or simply success stories are much appreciated.
