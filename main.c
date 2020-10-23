@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 11/2019 by Olaf Rempel                                  *
+ *   Copyright (C) 10/2020 by Olaf Rempel                                  *
  *   razzor@kopf-tisch.de                                                  *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -21,27 +21,34 @@
 #include <avr/boot.h>
 #include <avr/pgmspace.h>
 
-#define VERSION_STRING      "TWIBOOT v3.0"
-#define EEPROM_SUPPORT      1
-#define LED_SUPPORT         1
-#define USE_CLOCKSTRETCH    0
+#define VERSION_STRING          "TWIBOOT v3.1"
+#define EEPROM_SUPPORT          1
+#define LED_SUPPORT             1
 
-#define F_CPU               8000000ULL
-#define TIMER_DIVISOR       1024
-#define TIMER_IRQFREQ_MS    25
-#define TIMEOUT_MS          1000
+#ifndef USE_CLOCKSTRETCH
+#define USE_CLOCKSTRETCH        0
+#endif
+
+#ifndef TWI_ADDRESS
+#define TWI_ADDRESS             0x29
+#endif
+
+#define F_CPU                   8000000ULL
+#define TIMER_DIVISOR           1024
+#define TIMER_IRQFREQ_MS        25
+#define TIMEOUT_MS              1000
 
 #define TIMER_MSEC2TICKS(x)     ((x * F_CPU) / (TIMER_DIVISOR * 1000ULL))
 #define TIMER_MSEC2IRQCNT(x)    (x / TIMER_IRQFREQ_MS)
 
-#if LED_SUPPORT
-#define LED_INIT()          DDRB = ((1<<PORTB4) | (1<<PORTB5))
-#define LED_RT_ON()         PORTB |= (1<<PORTB4)
-#define LED_RT_OFF()        PORTB &= ~(1<<PORTB4)
-#define LED_GN_ON()         PORTB |= (1<<PORTB5)
-#define LED_GN_OFF()        PORTB &= ~(1<<PORTB5)
-#define LED_GN_TOGGLE()     PORTB ^= (1<<PORTB5)
-#define LED_OFF()           PORTB = 0x00
+#if (LED_SUPPORT)
+#define LED_INIT()              DDRB = ((1<<PORTB4) | (1<<PORTB5))
+#define LED_RT_ON()             PORTB |= (1<<PORTB4)
+#define LED_RT_OFF()            PORTB &= ~(1<<PORTB4)
+#define LED_GN_ON()             PORTB |= (1<<PORTB5)
+#define LED_GN_OFF()            PORTB &= ~(1<<PORTB5)
+#define LED_GN_TOGGLE()         PORTB ^= (1<<PORTB5)
+#define LED_OFF()               PORTB = 0x00
 #else
 #define LED_INIT()
 #define LED_RT_ON()
@@ -50,11 +57,7 @@
 #define LED_GN_OFF()
 #define LED_GN_TOGGLE()
 #define LED_OFF()
-#endif
-
-#ifndef TWI_ADDRESS
-#define TWI_ADDRESS         0x29
-#endif
+#endif /* LED_SUPPORT */
 
 /* SLA+R */
 #define CMD_WAIT                0x00
@@ -403,6 +406,9 @@ static void TWI_vect(void)
         case 0x80:
             if (TWI_data_write(bcnt++, TWDR) == 0x00)
             {
+                /* the ACK returned by TWI_data_write() is not for the current
+                 * data in TWDR, but for the next byte received
+                 */
                 control &= ~(1<<TWEA);
             }
             break;
@@ -411,6 +417,7 @@ static void TWI_vect(void)
         case 0xA8:
             bcnt = 0;
             LED_RT_ON();
+            /* fall through */
 
         /* prev. SLA+R, data sent, ACK returned -> send data */
         case 0xB8:
@@ -593,10 +600,12 @@ int main(void)
 
     LED_OFF();
 
+#if (LED_SUPPORT)
     uint16_t wait = 0x0000;
     do {
         __asm volatile ("nop");
     } while (--wait);
+#endif /* (LED_SUPPORT) */
 
     jump_to_app();
 } /* main */
