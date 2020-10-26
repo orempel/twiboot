@@ -67,7 +67,7 @@ AVRDUDE_MCU=t85
 AVRDUDE_FUSES=lfuse:w:0xe2:m hfuse:w:0xdd:m efuse:w:0xfe:m
 
 BOOTLOADER_START=0x1C00
-CFLAGS_TARGET=-DUSE_CLOCKSTRETCH=1
+CFLAGS_TARGET=-DUSE_CLOCKSTRETCH=1 -DVIRTUAL_BOOT_SECTION=1
 endif
 
 # ---------------------------------------------------------------------------

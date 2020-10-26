@@ -29,6 +29,10 @@
 #define USE_CLOCKSTRETCH        0
 #endif
 
+#ifndef VIRTUAL_BOOT_SECTION
+#define VIRTUAL_BOOT_SECTION    0
+#endif
+
 #ifndef TWI_ADDRESS
 #define TWI_ADDRESS             0x29
 #endif
@@ -85,6 +89,23 @@
 #define USI_ENABLE_SDA_OUTPUT   0x20    /* SDA is output (slave transmitting) */
 #define USI_ENABLE_SCL_HOLD     0x40    /* Hold SCL low after clock overflow */
 #endif /* !defined(TWCR) && defined(USICR) */
+
+#if (VIRTUAL_BOOT_SECTION)
+/* unused vector to store application start address */
+#define APPVECT_NUM             EE_RDY_vect_num
+
+/* each vector table entry is a 2byte RJMP opcode */
+#define RSTVECT_ADDR            0x0000
+#define APPVECT_ADDR            (APPVECT_NUM * 2)
+#define RSTVECT_PAGE_OFFSET     (RSTVECT_ADDR % SPM_PAGESIZE)
+#define APPVECT_PAGE_OFFSET     (APPVECT_ADDR % SPM_PAGESIZE)
+
+/* create RJMP opcode for the vector table */
+#define OPCODE_RJMP(addr)       (((addr) & 0x0FFF) | 0xC000)
+
+#elif (!defined(ASRE) && !defined (RWWSRE))
+#error "Device without bootloader section requires VIRTUAL_BOOT_SECTION"
+#endif
 
 /* SLA+R */
 #define CMD_WAIT                0x00
@@ -165,6 +186,12 @@ static uint8_t cmd = CMD_WAIT;
 static uint8_t buf[SPM_PAGESIZE];
 static uint16_t addr;
 
+#if (VIRTUAL_BOOT_SECTION)
+/* reset/application vectors received from host, needed for verify read */
+static uint8_t rstvect_save[2];
+static uint8_t appvect_save[2];
+#endif /* (VIRTUAL_BOOT_SECTION) */
+
 /* *************************************************************************
  * write_flash_page
  * ************************************************************************* */
@@ -173,6 +200,29 @@ static void write_flash_page(void)
     uint16_t pagestart = addr;
     uint8_t size = SPM_PAGESIZE;
     uint8_t *p = buf;
+
+#if (VIRTUAL_BOOT_SECTION)
+    if (pagestart == (RSTVECT_ADDR & ~(SPM_PAGESIZE -1)))
+    {
+        /* save original vectors for verify read */
+        rstvect_save[0] = buf[RSTVECT_PAGE_OFFSET];
+        rstvect_save[1] = buf[RSTVECT_PAGE_OFFSET + 1];
+        appvect_save[0] = buf[APPVECT_PAGE_OFFSET];
+        appvect_save[1] = buf[APPVECT_PAGE_OFFSET + 1];
+
+        /* replace reset vector with jump to bootloader address */
+        uint16_t rst_vector = OPCODE_RJMP(BOOTLOADER_START -1);
+        buf[RSTVECT_PAGE_OFFSET] = (rst_vector & 0xFF);
+        buf[RSTVECT_PAGE_OFFSET + 1] = (rst_vector >> 8) & 0xFF;
+
+        /* replace application vector with jump to original reset vector */
+        uint16_t app_vector = rstvect_save[0] | (rstvect_save[1] << 8);
+        app_vector = OPCODE_RJMP(app_vector - APPVECT_NUM);
+
+        buf[APPVECT_PAGE_OFFSET] = (app_vector & 0xFF);
+        buf[APPVECT_PAGE_OFFSET + 1] = (app_vector >> 8) & 0xFF;
+    }
+#endif /* (VIRTUAL_BOOT_SECTION) */
 
     if (pagestart < BOOTLOADER_START)
     {
@@ -399,7 +449,33 @@ static uint8_t TWI_data_read(uint8_t bcnt)
             break;
 
         case CMD_ACCESS_FLASH:
-            data = pgm_read_byte_near(addr++);
+            switch (addr)
+            {
+/* return cached values for verify read */
+#if (VIRTUAL_BOOT_SECTION)
+                case RSTVECT_ADDR:
+                    data = rstvect_save[0];
+                    break;
+
+                case (RSTVECT_ADDR + 1):
+                    data = rstvect_save[1];
+                    break;
+
+                case APPVECT_ADDR:
+                    data = appvect_save[0];
+                    break;
+
+                case (APPVECT_ADDR + 1):
+                    data = appvect_save[1];
+                    break;
+#endif /* (VIRTUAL_BOOT_SECTION) */
+
+                default:
+                    data = pgm_read_byte_near(addr);
+                    break;
+            }
+
+            addr++;
             break;
 
 #if (EEPROM_SUPPORT)
@@ -680,7 +756,11 @@ static void TIMER0_OVF_vect(void)
 } /* TIMER0_OVF_vect */
 
 
-static void (*jump_to_app)(void) __attribute__ ((noreturn)) = 0x0000;
+#if (VIRTUAL_BOOT_SECTION)
+static void (*jump_to_app)(void) __attribute__ ((noreturn)) = (void*)APPVECT_ADDR;
+#else
+static void (*jump_to_app)(void) __attribute__ ((noreturn)) = (void*)0x0000;
+#endif
 
 
 /* *************************************************************************
@@ -730,6 +810,14 @@ int main(void)
 {
     LED_INIT();
     LED_GN_ON();
+
+#if (VIRTUAL_BOOT_SECTION)
+	/* load current values (for reading flash) */
+    rstvect_save[0] = pgm_read_byte_near(RSTVECT_ADDR);
+    rstvect_save[1] = pgm_read_byte_near(RSTVECT_ADDR + 1);
+    appvect_save[0] = pgm_read_byte_near(APPVECT_ADDR);
+    appvect_save[1] = pgm_read_byte_near(APPVECT_ADDR + 1);
+#endif /* (VIRTUAL_BOOT_SECTION) */
 
     /* timer0: running with F_CPU/1024 */
 #if defined (TCCR0)
