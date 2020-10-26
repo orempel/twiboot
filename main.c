@@ -59,6 +59,33 @@
 #define LED_OFF()
 #endif /* LED_SUPPORT */
 
+#if !defined(TWCR) && defined(USICR)
+#define USI_PIN_INIT()          { PORTB |= ((1<<PORTB0) | (1<<PORTB2)); \
+                                  DDRB |= (1<<PORTB2); \
+                                }
+#define USI_PIN_SDA_INPUT()     DDRB &= ~(1<<PORTB0)
+#define USI_PIN_SDA_OUTPUT()    DDRB |= (1<<PORTB0)
+#define USI_PIN_SCL()           (PINB & (1<<PINB2))
+
+#if (USE_CLOCKSTRETCH == 0)
+#error "USI peripheral requires enabled USE_CLOCKSTRETCH"
+#endif
+
+#define USI_STATE_MASK          0x0F
+#define USI_STATE_IDLE          0x00    /* wait for Start Condition */
+#define USI_STATE_SLA           0x01    /* wait for Slave Address */
+#define USI_STATE_SLAW_ACK      0x02    /* ACK Slave Address + Write (Master writes) */
+#define USI_STATE_SLAR_ACK      0x03    /* ACK Slave Address + Read (Master reads) */
+#define USI_STATE_NAK           0x04    /* send NAK */
+#define USI_STATE_DATW          0x05    /* receive Data */
+#define USI_STATE_DATW_ACK      0x06    /* transmit ACK for received Data */
+#define USI_STATE_DATR          0x07    /* transmit Data */
+#define USI_STATE_DATR_ACK      0x08    /* receive ACK for transmitted Data */
+#define USI_WAIT_FOR_ACK        0x10    /* wait for ACK bit (2 SCL clock edges) */
+#define USI_ENABLE_SDA_OUTPUT   0x20    /* SDA is output (slave transmitting) */
+#define USI_ENABLE_SCL_HOLD     0x40    /* Hold SCL low after clock overflow */
+#endif /* !defined(TWCR) && defined(USICR) */
+
 /* SLA+R */
 #define CMD_WAIT                0x00
 #define CMD_READ_VERSION        0x01
@@ -163,7 +190,11 @@ static void write_flash_page(void)
 
         boot_page_write(pagestart);
         boot_spm_busy_wait();
+
+#if defined (ASRE) || defined (RWWSRE)
+        /* only required for bootloader section */
         boot_rww_enable();
+#endif
     }
 } /* write_flash_page */
 
@@ -386,6 +417,7 @@ static uint8_t TWI_data_read(uint8_t bcnt)
 } /* TWI_data_read */
 
 
+#if defined (TWCR)
 /* *************************************************************************
  * TWI_vect
  * ************************************************************************* */
@@ -472,6 +504,156 @@ static void TWI_vect(void)
 
     TWCR = (1<<TWINT) | control;
 } /* TWI_vect */
+#endif /* defined (TWCR) */
+
+#if defined (USICR)
+/* *************************************************************************
+ * usi_statemachine
+ * ************************************************************************* */
+static void usi_statemachine(uint8_t usisr)
+{
+    static uint8_t usi_state;
+    static uint8_t bcnt;
+
+    uint8_t data = USIDR;
+    uint8_t state = usi_state & USI_STATE_MASK;
+
+    /* Start Condition detected */
+    if (usisr & (1<<USISIF))
+    {
+        /* wait until SCL goes low */
+        while (USI_PIN_SCL());
+
+        usi_state = USI_STATE_SLA | USI_ENABLE_SCL_HOLD;
+        state = USI_STATE_IDLE;
+    }
+
+    /* Stop Condition detected */
+    if (usisr & (1<<USIPF))
+    {
+        LED_RT_OFF();
+        usi_state = USI_STATE_IDLE;
+        state = USI_STATE_IDLE;
+    }
+
+    if (state == USI_STATE_IDLE)
+    {
+        /* do nothing */
+    }
+    /* Slave Address received => prepare ACK/NAK */
+    else if (state == USI_STATE_SLA)
+    {
+        bcnt = 0;
+
+        /* SLA+W received -> send ACK */
+        if (data == ((TWI_ADDRESS<<1) | 0x00))
+        {
+            LED_RT_ON();
+            usi_state = USI_STATE_SLAW_ACK | USI_WAIT_FOR_ACK | USI_ENABLE_SDA_OUTPUT | USI_ENABLE_SCL_HOLD;
+            USIDR = 0x00;
+        }
+        /* SLA+R received -> send ACK */
+        else if (data == ((TWI_ADDRESS<<1) | 0x01))
+        {
+            LED_RT_ON();
+            usi_state = USI_STATE_SLAR_ACK | USI_WAIT_FOR_ACK | USI_ENABLE_SDA_OUTPUT | USI_ENABLE_SCL_HOLD;
+            USIDR = 0x00;
+        }
+        /* not addressed -> send NAK */
+        else
+        {
+            usi_state = USI_STATE_NAK | USI_WAIT_FOR_ACK | USI_ENABLE_SDA_OUTPUT | USI_ENABLE_SCL_HOLD;
+            USIDR = 0x80;
+        }
+    }
+    /* sent NAK -> go to idle */
+    else if (state == USI_STATE_NAK)
+    {
+        usi_state = USI_STATE_IDLE;
+    }
+    /* sent ACK after SLA+W -> wait for data */
+    /* sent ACK after DAT+W -> wait for more data */
+    else if ((state == USI_STATE_SLAW_ACK) ||
+             (state == USI_STATE_DATW_ACK)
+            )
+    {
+        usi_state = USI_STATE_DATW | USI_ENABLE_SCL_HOLD;
+    }
+    /* data received -> send ACK/NAK */
+    else if (state == USI_STATE_DATW)
+    {
+        if (TWI_data_write(bcnt++, data))
+        {
+            usi_state = USI_STATE_DATW_ACK | USI_WAIT_FOR_ACK | USI_ENABLE_SDA_OUTPUT | USI_ENABLE_SCL_HOLD;
+            USIDR = 0x00;
+        }
+        else
+        {
+            usi_state = USI_STATE_NAK | USI_WAIT_FOR_ACK | USI_ENABLE_SDA_OUTPUT | USI_ENABLE_SCL_HOLD;
+            USIDR = 0x80;
+        }
+    }
+    /* sent ACK after SLA+R -> send data */
+    /* received ACK after DAT+R -> send more data */
+    else if ((state == USI_STATE_SLAR_ACK) ||
+             ((state == USI_STATE_DATR_ACK) && !(data & 0x01))
+            )
+    {
+        USIDR = TWI_data_read(bcnt++);
+        usi_state = USI_STATE_DATR | USI_ENABLE_SDA_OUTPUT | USI_ENABLE_SCL_HOLD;
+    }
+    /* sent data after SLA+R -> receive ACK/NAK */
+    else if (state == USI_STATE_DATR)
+    {
+        usi_state = USI_STATE_DATR_ACK | USI_WAIT_FOR_ACK | USI_ENABLE_SCL_HOLD;
+        USIDR = 0x80;
+    }
+    /* received NAK after DAT+R -> go to idle */
+    else if ((state == USI_STATE_DATR_ACK) && (data & 0x01))
+    {
+        usi_state = USI_STATE_IDLE;
+    }
+    /* default -> go to idle */
+    else
+    {
+        usi_state = USI_STATE_IDLE;
+    }
+
+    /* set SDA direction according to current state */
+    if (usi_state & USI_ENABLE_SDA_OUTPUT)
+    {
+        USI_PIN_SDA_OUTPUT();
+    }
+    else
+    {
+        USI_PIN_SDA_INPUT();
+    }
+
+    if (usi_state & USI_ENABLE_SCL_HOLD)
+    {
+        /* Enable TWI Mode, hold SCL low after counter overflow, count both SCL edges */
+        USICR = (1<<USIWM1) | (1<<USIWM0) | (1<<USICS1);
+    }
+    else
+    {
+        /* Enable TWI, hold SCL low only after start condition, count both SCL edges */
+        USICR = (1<<USIWM1) | (1<<USICS1);
+    }
+
+    /* clear start/overflow/stop condition flags */
+    usisr &= ((1<<USISIF) | (1<<USIOIF) | (1<<USIPF));
+    if (usi_state & USI_WAIT_FOR_ACK)
+    {
+        /* count 2 SCL edges (ACK/NAK bit) */
+        USISR = usisr | ((16 -2)<<USICNT0);
+    }
+    else
+    {
+        /* count 16 SCL edges (8bit data) */
+        USISR = usisr | ((16 -16)<<USICNT0);
+    }
+} /* usi_statemachine */
+#endif /* defined (USICR) */
 
 
 /* *************************************************************************
@@ -558,16 +740,30 @@ int main(void)
 #error "TCCR0(B) not defined"
 #endif
 
+#if defined (TWCR)
     /* TWI init: set address, auto ACKs */
     TWAR = (TWI_ADDRESS<<1);
     TWCR = (1<<TWEA) | (1<<TWEN);
+#elif defined (USICR)
+    USI_PIN_INIT();
+    usi_statemachine(0x00);
+#else
+#error "No TWI/USI peripheral found"
+#endif
 
     while (cmd != CMD_BOOT_APPLICATION)
     {
+#if defined (TWCR)
         if (TWCR & (1<<TWINT))
         {
             TWI_vect();
         }
+#elif defined (USICR)
+        if (USISR & ((1<<USISIF) | (1<<USIOIF) | (1<<USIPF)))
+        {
+            usi_statemachine(USISR);
+        }
+#endif
 
 #if defined (TIFR)
         if (TIFR & (1<<TOV0))
@@ -586,8 +782,13 @@ int main(void)
 #endif
     }
 
+#if defined (TWCR)
     /* Disable TWI but keep address! */
     TWCR = 0x00;
+#elif defined (USICR)
+    /* Disable USI peripheral */
+    USICR = 0x00;
+#endif
 
     /* disable timer0 */
 #if defined (TCCR0)

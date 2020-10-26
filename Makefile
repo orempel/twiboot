@@ -8,7 +8,7 @@ TARGET = twiboot
 SOURCE = $(wildcard *.c)
 
 # select MCU
-MCU = atmega88
+MCU = attiny85
 
 AVRDUDE_PROG := -c avr910 -b 115200 -P /dev/ttyUSB0
 #AVRDUDE_PROG := -c dragon_isp -P usb
@@ -58,10 +58,22 @@ AVRDUDE_FUSES=lfuse:w:0xc2:m hfuse:w:0xdc:m efuse:w:0xfd:m
 BOOTLOADER_START=0x7C00
 endif
 
+ifeq ($(MCU), attiny85)
+# attiny85:
+# Fuse L: 0xe2 (8Mhz internal RC-Osz.)
+# Fuse H: 0xdd (2.7V BOD)
+# Fuse E: 0xfe (self programming enable)
+AVRDUDE_MCU=t85
+AVRDUDE_FUSES=lfuse:w:0xe2:m hfuse:w:0xdd:m efuse:w:0xfe:m
+
+BOOTLOADER_START=0x1C00
+CFLAGS_TARGET=-DUSE_CLOCKSTRETCH=1
+endif
+
 # ---------------------------------------------------------------------------
 
 CFLAGS = -pipe -g -Os -mmcu=$(MCU) -Wall -fdata-sections -ffunction-sections
-CFLAGS += -Wa,-adhlns=$(*F).lst -DBOOTLOADER_START=$(BOOTLOADER_START)
+CFLAGS += -Wa,-adhlns=$(*F).lst -DBOOTLOADER_START=$(BOOTLOADER_START) $(CFLAGS_TARGET)
 LDFLAGS = -Wl,-Map,$(@:.elf=.map),--cref,--relax,--gc-sections,--section-start=.text=$(BOOTLOADER_START)
 LDFLAGS += -nostartfiles
 
