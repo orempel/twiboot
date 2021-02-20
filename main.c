@@ -21,7 +21,7 @@
 #include <avr/boot.h>
 #include <avr/pgmspace.h>
 
-#define VERSION_STRING          "TWIBOOT v3.1"
+#define VERSION_STRING          "TWIBOOT v3.2"
 #define EEPROM_SUPPORT          1
 #define LED_SUPPORT             1
 
@@ -400,20 +400,18 @@ static uint8_t TWI_data_write(uint8_t bcnt, uint8_t data)
                     uint8_t pos = bcnt -4;
 
                     buf[pos] = data;
-                    if (pos >= (sizeof(buf) -2))
+                    if (pos >= (SPM_PAGESIZE -1))
                     {
-                        ack = 0x00;
-                    }
-
-                    if ((cmd == CMD_ACCESS_FLASH) &&
-                        (pos >= (sizeof(buf) -1))
-                       )
-                    {
+                        if (cmd == CMD_ACCESS_FLASH)
+                        {
 #if (USE_CLOCKSTRETCH)
-                        write_flash_page();
+                            write_flash_page();
 #else
-                        cmd = CMD_WRITE_FLASH_PAGE;
+                            cmd = CMD_WRITE_FLASH_PAGE;
 #endif
+                        }
+
+                        ack = 0x00;
                     }
                     break;
                 }
